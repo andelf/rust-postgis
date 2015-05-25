@@ -3,6 +3,12 @@ name = "postgis"
 version = "0.1.0"
 authors = ["andelf <andelf@gmail.com>"]
 
+description = "postgis helper crate."
+homepage = "https://github.com/andelf/rust-postgis"
+repository = "https://github.com/andelf/rust-postgis"
+keywords = ["PostgreSQL", "PostGIS"]
+license = "MIT"
+
 
 [dependencies]
 postgres = "0.8.9"
