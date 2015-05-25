@@ -477,49 +477,14 @@ impl<P: ToPoint + fmt::Debug> Geometry for Polygon<P> {
 impl<P: ToPoint + fmt::Debug> ToSql for Polygon<P> {
     to_sql_checked!();
     accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
-        // use LE
-        try!(w.write_u8(0x01));
-        let mut type_id = P::type_id();
-        // clean lower bit
-        type_id &= 0xffff_ff00;
-        type_id |= 0x0000_0002;
-        w.write_u32::<LittleEndian>(type_id);
-        P::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        for point in self.rings.iter() {
-            point.write_ewkb_body(w);
-        }
-        Ok(IsNull::No)
+    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+        self.write_ewkb(ty, w)
     }
 
 }
 impl<P: ToPoint + fmt::Debug> FromSql for Polygon<P> {
     accepts_geography!();
     fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<Polygon<P>> {
-        let mut ret = Polygon::new();
-        let byte_order = try!(raw.read_i8());
-        let is_be = byte_order == 0i8;
-
-        let mut type_id = try!(read_u32(raw, is_be));
-        println!("type id => {:X}", type_id);
-        if type_id & 0xff != 0x02 || type_id & 0xff00_0000 != P::type_id() & 0xff00_0000 {
-            return Err(Error::WrongType(ty.clone()));
-        }
-
-        match P::opt_srid() {
-            Some(srid) => {
-                if try!(read_i32(raw, is_be)) != srid {
-                    return Err(Error::WrongType(ty.clone()));
-                }
-            },
-            _ => ()
-        }
-        let size = try!(read_u32(raw, is_be)) as usize;
-        println!("size => size {}", size);
-        for _ in 0..size {
-            println!("");
-            ret.rings.push(LineString::<P>::read_ewkb_body(raw, is_be).unwrap())
-        }
-        Ok(ret)
+        <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
     }
 }
