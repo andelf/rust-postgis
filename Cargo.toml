@@ -1,0 +1,9 @@
+[package]
+name = "postgis"
+version = "0.1.0"
+authors = ["andelf <andelf@gmail.com>"]
+
+
+[dependencies]
+postgres = "0.8.9"
+byteorder = "*"
