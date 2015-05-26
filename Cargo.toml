@@ -1,12 +1,11 @@
 [package]
 name = "postgis"
-version = "0.1.0"
-authors = ["andelf <andelf@gmail.com>"]
-
-description = "postgis helper crate."
+version = "0.1.1"
+authors = ["ShuYu Wang <andelf@gmail.com>"]
+description = "An extension to rust-postgres, adds support for PostGIS."
 homepage = "https://github.com/andelf/rust-postgis"
 repository = "https://github.com/andelf/rust-postgis"
-keywords = ["PostgreSQL", "PostGIS"]
+keywords = ["PostgreSQL", "PostGIS", "GIS", "GEO"]
 license = "MIT"
 
 
