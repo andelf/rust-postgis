@@ -1,3 +1,10 @@
+//  FileName    : lib.rs
+//  Author      : ShuYu Wang <andelf@gmail.com>
+//  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
+//  Copyright   : Feather Workshop (c) 2015
+//  Description : PostGIS helper
+//  Time-stamp: <2015-05-27 01:45:57 andelf>
+
 #[macro_use(to_sql_checked, accepts)]
 extern crate postgres;
 extern crate byteorder;
@@ -7,10 +14,8 @@ use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use postgres::{ToSql, FromSql};
-use postgres::types;
 use postgres::types::{Type, IsNull};
 use postgres::{Result, Error};
-use byteorder;
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 
 
@@ -44,10 +49,10 @@ trait Geometry: fmt::Debug + Sized {
     fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
         // use LE
         try!(w.write_u8(0x01));
-        let mut type_id = Self::type_id();
-        w.write_u32::<LittleEndian>(type_id);
+        let type_id = Self::type_id();
+        try!(w.write_u32::<LittleEndian>(type_id));
         Self::PointType::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        self.write_ewkb_body(w);
+        try!(self.write_ewkb_body(w));
         Ok(IsNull::No)
     }
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()>;
@@ -137,8 +142,8 @@ trait ToPoint: Sized {
         let byte_order = try!(raw.read_i8());
         let is_be = byte_order == 0i8;
 
-        let mut type_ = try!(read_u32(raw, is_be));
-        if type_ != Self::type_id() {
+        let type_id = try!(read_u32(raw, is_be));
+        if type_id != Self::type_id() {
             return Err(byteorder::Error::UnexpectedEOF);
         }
 
@@ -172,9 +177,9 @@ trait ToPoint: Sized {
     fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
         // use LE
         try!(w.write_u8(0x01));
-        w.write_u32::<LittleEndian>(Self::type_id());
+        try!(w.write_u32::<LittleEndian>(Self::type_id()));
         Self::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        self.write_ewkb_body(w);
+        try!(self.write_ewkb_body(w));
         Ok(IsNull::No)
     }
 
@@ -182,8 +187,8 @@ trait ToPoint: Sized {
         // lol
         let x = unsafe { *mem::transmute::<_, *const f64>(self) };
         let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
-        w.write_f64::<LittleEndian>(x);
-        w.write_f64::<LittleEndian>(y);
+        try!(w.write_f64::<LittleEndian>(x));
+        try!(w.write_f64::<LittleEndian>(y));
         self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
         self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
         Ok(())
@@ -256,20 +261,20 @@ pub struct PointZM<S: SRID = WGS84> {
 
 impl PointZM {
     pub fn new(x: f64, y: f64, z: f64, m: f64) -> PointZM {
-        PointZM { x: x, y: y, z: z, m: z, phantom: PhantomData }
+        PointZM { x: x, y: y, z: z, m: m, phantom: PhantomData }
     }
 }
 
 impl<S: SRID> ToPoint for Point<S> {
     type SRIDType = S;
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self {
+    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
         Point { x: x, y: y,  phantom: PhantomData }
     }
 }
 
 impl<S: SRID> ToPoint for PointZ<S> {
     type SRIDType = S;
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self {
+    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, _m: Option<f64>) -> Self {
         PointZ { x: x, y: y, z: z.unwrap(), phantom: PhantomData }
     }
     fn opt_z(&self) -> Option<f64> {
@@ -279,7 +284,7 @@ impl<S: SRID> ToPoint for PointZ<S> {
 }
 impl<S: SRID> ToPoint for PointM<S> {
     type SRIDType = S;
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self {
+    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, m: Option<f64>) -> Self {
         PointM { x: x, y: y, m: m.unwrap(), phantom: PhantomData }
     }
     fn opt_m(&self) -> Option<f64> {
@@ -618,17 +623,17 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
     fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
         // use LE
         try!(w.write_u8(0x01));
-        let mut type_id = Self::type_id();
-        w.write_u32::<LittleEndian>(type_id);
+        let type_id = Self::type_id();
+        try!(w.write_u32::<LittleEndian>(type_id));
         Self::PointType::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        self.write_ewkb_body(w);
+        try!(self.write_ewkb_body(w));
         Ok(IsNull::No)
     }
 
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
         try!(w.write_u32::<LittleEndian>(self.geometries.len() as u32));
         for item in self.geometries.iter() {
-            match item {
+            let ret = match item {
                 // FIXME: fake type
                 &GeometryType::Point(ref obj)              => obj.write_ewkb(&Type::Point, w),
                 &GeometryType::LineString(ref obj)         => obj.write_ewkb(&Type::Point, w),
@@ -638,6 +643,7 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
                 &GeometryType::MultiPolygon(ref obj)       => obj.write_ewkb(&Type::Point, w),
                 &GeometryType::GeometryCollection(ref obj) => obj.write_ewkb(&Type::Point, w),
             };
+            try!(ret);
         }
         Ok(())
     }
