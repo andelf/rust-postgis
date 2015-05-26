@@ -577,3 +577,134 @@ impl<P: ToPoint> fmt::Display for LineString<P> {
         Ok(())
     }
 }
+
+// generic type
+#[derive(Debug)]
+pub enum GeometryType<P> {
+    Point(P),
+    LineString(LineString<P>),
+    Polygon(Polygon<P>),
+    MultiPoint(MultiPoint<P>),
+    MultiLineString(MultiLineString<P>),
+    MultiPolygon(MultiPolygon<P>),
+    GeometryCollection(GeometryCollection<P>)
+}
+
+
+
+
+/// GeometryCollection
+#[derive(Debug)]
+pub struct GeometryCollection<P> {
+    pub geometries: Vec<GeometryType<P>>
+}
+
+impl<P: ToPoint> GeometryCollection<P> {
+    pub fn new() -> GeometryCollection<P> {
+        GeometryCollection { geometries: Vec::new() }
+    }
+}
+impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
+    type PointType = P;
+    fn type_id() -> u32 {
+        let type_id = P::type_id();
+        (type_id & 0xffff_ff00) | 0x0000_0007
+    }
+
+    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
+        // use LE
+        try!(w.write_u8(0x01));
+        let mut type_id = Self::type_id();
+        w.write_u32::<LittleEndian>(type_id);
+        Self::PointType::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
+        self.write_ewkb_body(w);
+        Ok(IsNull::No)
+    }
+
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+        try!(w.write_u32::<LittleEndian>(self.geometries.len() as u32));
+        for item in self.geometries.iter() {
+            match item {
+                // FIXME: fake type
+                &GeometryType::Point(ref obj)              => obj.write_ewkb(&Type::Point, w),
+                &GeometryType::LineString(ref obj)         => obj.write_ewkb(&Type::Point, w),
+                &GeometryType::Polygon(ref obj)            => obj.write_ewkb(&Type::Point, w),
+                &GeometryType::MultiPoint(ref obj)         => obj.write_ewkb(&Type::Point, w),
+                &GeometryType::MultiLineString(ref obj)    => obj.write_ewkb(&Type::Point, w),
+                &GeometryType::MultiPolygon(ref obj)       => obj.write_ewkb(&Type::Point, w),
+                &GeometryType::GeometryCollection(ref obj) => obj.write_ewkb(&Type::Point, w),
+            };
+        }
+        Ok(())
+    }
+    fn read_ewkb<R: Read>(raw: &mut R) -> byteorder::Result<Self> {
+        let byte_order = try!(raw.read_i8());
+        let is_be = byte_order == 0i8;
+
+        let type_id = try!(read_u32(raw, is_be));
+        if type_id != Self::type_id() {
+            return Err(byteorder::Error::UnexpectedEOF);
+        }
+
+        match Self::PointType::opt_srid() {
+            Some(srid) => {
+                if try!(read_i32(raw, is_be)) != srid {
+                    return Err(byteorder::Error::UnexpectedEOF);
+                }
+            },
+            _ => ()
+        }
+
+        Self::read_ewkb_body(raw, is_be)
+    }
+
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+        let mut ret = GeometryCollection::new();
+        let size = try!(read_u32(raw, is_be)) as usize;
+        for _ in 0..size {
+            let is_be = try!(raw.read_i8()) == 0i8;
+
+            let type_id = try!(read_u32(raw, is_be));
+            if type_id & 0xffff_ff00 != Self::type_id() & 0xffff_ff00 {
+                // should be type error
+                return Err(byteorder::Error::UnexpectedEOF);
+            }
+
+            match Self::PointType::opt_srid() {
+                Some(srid) => {
+                    if try!(read_i32(raw, is_be)) != srid {
+                        return Err(byteorder::Error::UnexpectedEOF);
+                    }
+                },
+                _ => ()
+            }
+            match type_id & 0xff {
+                0x01 => ret.geometries.push(GeometryType::Point(P::read_ewkb_body(raw, is_be).unwrap())),
+                0x02 => ret.geometries.push(GeometryType::LineString(LineString::read_ewkb_body(raw, is_be).unwrap())),
+                0x03 => ret.geometries.push(GeometryType::Polygon(Polygon::read_ewkb_body(raw, is_be).unwrap())),
+                0x04 => ret.geometries.push(GeometryType::MultiPoint(MultiPoint::read_ewkb_body(raw, is_be).unwrap())),
+                0x05 => ret.geometries.push(GeometryType::MultiLineString(MultiLineString::read_ewkb_body(raw, is_be).unwrap())),
+                0x06 => ret.geometries.push(GeometryType::MultiPolygon(MultiPolygon::read_ewkb_body(raw, is_be).unwrap())),
+                0x07 => ret.geometries.push(GeometryType::GeometryCollection(GeometryCollection::read_ewkb_body(raw, is_be).unwrap())),
+                _    => panic!("....")
+            }
+        }
+        Ok(ret)
+    }
+
+}
+
+impl<P: ToPoint + fmt::Debug> ToSql for GeometryCollection<P> {
+    to_sql_checked!();
+    accepts_geography!();
+    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+        self.write_ewkb(ty, w)
+    }
+
+}
+impl<P: ToPoint + fmt::Debug> FromSql for GeometryCollection<P> {
+    accepts_geography!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<GeometryCollection<P>> {
+        <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+    }
+}
