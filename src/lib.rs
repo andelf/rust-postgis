@@ -3,7 +3,7 @@
 //  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : PostGIS helper
-//  Time-stamp: <2015-05-27 01:45:57 andelf>
+//  Time-stamp: <2015-05-27 15:10:18 andelf>
 
 #[macro_use(to_sql_checked, accepts)]
 extern crate postgres;
@@ -13,6 +13,7 @@ use std::io::prelude::*;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
+use std::iter::FromIterator;
 use postgres::{ToSql, FromSql};
 use postgres::types::{Type, IsNull};
 use postgres::{Result, Error};
@@ -76,16 +77,19 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<f64> {
 }
 
 
-
 pub trait SRID {
     #[inline(always)]
     fn as_srid() -> Option<i32>;
 }
-
+/// WGS84 — SRID 4326
 #[derive(Debug)]
 #[allow(missing_copy_implementations)] pub enum WGS84 {}
+
+/// UTM, Zone 17N, NAD27 — SRID 2029
 #[derive(Debug)]
 #[allow(missing_copy_implementations)] pub enum NAD27 {}
+
+/// Undefined spheroid (value 0)
 #[derive(Debug)]
 #[allow(missing_copy_implementations)] pub enum NoSRID {}
 
@@ -313,7 +317,6 @@ impl<S: SRID> ToPoint for PointZM<S> {
     }
 }
 
-
 macro_rules! accepts_geography {
     () => (
         fn accepts(ty: &Type) -> bool {
@@ -324,7 +327,6 @@ macro_rules! accepts_geography {
         }
     )
 }
-
 
 macro_rules! impl_traits_for_point {
     ($ptype:ident) => (
@@ -369,176 +371,157 @@ impl_traits_for_point!(PointZ);
 impl_traits_for_point!(PointM);
 impl_traits_for_point!(PointZM);
 
+// Non-Point type Macro
+macro_rules! define_geometry_container_type {
+    // points container
+    ($geotype:ident of type code $typecode:expr, contains points) => (
+        #[derive(Debug)]
+        pub struct $geotype<P> {
+            pub points: Vec<P>,
+        }
+
+        impl<P: ToPoint> $geotype<P> {
+            pub fn new() -> $geotype<P> {
+                $geotype { points: Vec::new() }
+            }
+        }
+
+        impl<P: ToPoint> FromIterator<P> for $geotype<P> {
+            #[inline]
+            fn from_iter<I: IntoIterator<Item=P>>(iterable: I) -> $geotype<P> {
+                let iterator = iterable.into_iter();
+                let (lower, _) = iterator.size_hint();
+                let mut ret = $geotype::new();
+                ret.points.reserve(lower);
+                for item in iterator {
+                    ret.points.push(item);
+                }
+                ret
+            }
+        }
+
+        impl<P: ToPoint + fmt::Debug> Geometry for $geotype<P> {
+            type PointType = P;
+            fn type_id() -> u32 {
+                let type_id = P::type_id();
+                (type_id & 0xffff_ff00) | $typecode
+            }
+
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+                let mut ret = $geotype::new();
+                let size = try!(read_u32(raw, is_be)) as usize;
+                for _ in 0..size {
+                    ret.points.push(P::read_ewkb_body(raw, is_be).unwrap())
+                }
+                Ok(ret)
+            }
+
+            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+                try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
+                for point in self.points.iter() {
+                    try!(point.write_ewkb_body(w));
+                }
+                Ok(())
+            }
+
+        }
+
+        impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
+            to_sql_checked!();
+            accepts_geography!();
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+                self.write_ewkb(ty, w)
+            }
+
+        }
+        impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
+            accepts_geography!();
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$geotype<P>> {
+                <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+            }
+        }
+        );
+    // common geo type contrainer
+    ($geotype:ident of type code $typecode:expr, contains $itemtype:ident named $itemname: ident) => (
+        #[derive(Debug)]
+        pub struct $geotype<P> {
+            pub $itemname: Vec<$itemtype<P>>
+        }
+
+        impl<P: ToPoint> $geotype<P> {
+            pub fn new() -> $geotype<P> {
+                $geotype { $itemname: Vec::new() }
+            }
+        }
+
+        impl<P: ToPoint> FromIterator<$itemtype<P>> for $geotype<P> {
+            #[inline]
+            fn from_iter<I: IntoIterator<Item=$itemtype<P>>>(iterable: I) -> $geotype<P> {
+                let iterator = iterable.into_iter();
+                let (lower, _) = iterator.size_hint();
+                let mut ret = $geotype::new();
+                ret.$itemname.reserve(lower);
+                for item in iterator {
+                    ret.$itemname.push(item);
+                }
+                ret
+            }
+        }
+
+        impl<P: ToPoint + fmt::Debug> Geometry for $geotype<P> {
+            type PointType = P;
+            fn type_id() -> u32 {
+                let type_id = P::type_id();
+                (type_id & 0xffff_ff00) | $typecode
+            }
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+                let mut ret = $geotype::new();
+                let size = try!(read_u32(raw, is_be)) as usize;
+                for _ in 0..size {
+                    ret.$itemname.push($itemtype::read_ewkb_body(raw, is_be).unwrap())
+                }
+                Ok(ret)
+            }
+            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+                try!(w.write_u32::<LittleEndian>(self.$itemname.len() as u32));
+                for item in self.$itemname.iter() {
+                    try!(item.write_ewkb_body(w));
+                }
+                Ok(())
+            }
+
+        }
+
+        impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
+            to_sql_checked!();
+            accepts_geography!();
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+                self.write_ewkb(ty, w)
+            }
+
+        }
+
+        impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
+            accepts_geography!();
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$geotype<P>> {
+                <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+            }
+        }
+    )
+}
+
+
 /// LineString
-#[derive(Debug)]
-pub struct LineString<P> {
-    pub points: Vec<P>,
-}
-
-impl<P: ToPoint> LineString<P> {
-    pub fn new() -> LineString<P> {
-        LineString { points: Vec::new() }
-    }
-}
-
-impl<P: ToPoint + fmt::Debug> Geometry for LineString<P> {
-    type PointType = P;
-    fn type_id() -> u32 {
-        let type_id = P::type_id();
-        (type_id & 0xffff_ff00) | 0x0000_0002
-    }
-
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
-        let mut ret = LineString::new();
-        let size = try!(read_u32(raw, is_be)) as usize;
-        for _ in 0..size {
-            ret.points.push(P::read_ewkb_body(raw, is_be).unwrap())
-        }
-        Ok(ret)
-    }
-
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
-        try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
-        for point in self.points.iter() {
-            try!(point.write_ewkb_body(w));
-        }
-        Ok(())
-    }
-
-}
-
-impl<P: ToPoint + fmt::Debug> ToSql for LineString<P> {
-    to_sql_checked!();
-    accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
-        self.write_ewkb(ty, w)
-    }
-
-}
-impl<P: ToPoint + fmt::Debug> FromSql for LineString<P> {
-    accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<LineString<P>> {
-        <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
-    }
-}
-
-/// MultiPoint
-#[derive(Debug)]
-pub struct MultiPoint<P> {
-    pub points: Vec<P>,
-}
-
-impl<P: ToPoint> MultiPoint<P> {
-    pub fn new() -> MultiPoint<P> {
-        MultiPoint { points: Vec::new() }
-    }
-}
-
-impl<P: ToPoint + fmt::Debug> Geometry for MultiPoint<P> {
-    type PointType = P;
-    fn type_id() -> u32 {
-        let type_id = P::type_id();
-        (type_id & 0xffff_ff00) | 0x0000_0004
-    }
-
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
-        let mut ret = MultiPoint::new();
-        let size = try!(read_u32(raw, is_be)) as usize;
-        for _ in 0..size {
-            ret.points.push(P::read_ewkb_body(raw, is_be).unwrap())
-        }
-        Ok(ret)
-    }
-
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
-        try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
-        for point in self.points.iter() {
-            try!(point.write_ewkb_body(w));
-        }
-        Ok(())
-    }
-
-}
-
-impl<P: ToPoint + fmt::Debug> ToSql for MultiPoint<P> {
-    to_sql_checked!();
-    accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
-        self.write_ewkb(ty, w)
-    }
-
-}
-impl<P: ToPoint + fmt::Debug> FromSql for MultiPoint<P> {
-    accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<MultiPoint<P>> {
-        <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
-    }
-}
-
-
-// macro
-macro_rules! define_geometry_container_type { ($geotype:ident of type code $typecode:expr, contains $itemtype:ident named $itemname: ident) => (
-    #[derive(Debug)]
-    pub struct $geotype<P> {
-        pub $itemname: Vec<$itemtype<P>>
-    }
-
-    impl<P: ToPoint> $geotype<P> {
-        pub fn new() -> $geotype<P> {
-            $geotype { $itemname: Vec::new() }
-        }
-    }
-
-    impl<P: ToPoint + fmt::Debug> Geometry for $geotype<P> {
-        type PointType = P;
-        fn type_id() -> u32 {
-            let type_id = P::type_id();
-            (type_id & 0xffff_ff00) | $typecode
-        }
-        fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
-            let mut ret = $geotype::new();
-            let size = try!(read_u32(raw, is_be)) as usize;
-            for _ in 0..size {
-                ret.$itemname.push($itemtype::read_ewkb_body(raw, is_be).unwrap())
-            }
-            Ok(ret)
-        }
-        fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
-            try!(w.write_u32::<LittleEndian>(self.$itemname.len() as u32));
-            for item in self.$itemname.iter() {
-                try!(item.write_ewkb_body(w));
-            }
-            Ok(())
-        }
-
-    }
-
-    impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
-        to_sql_checked!();
-        accepts_geography!();
-        fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
-            self.write_ewkb(ty, w)
-        }
-
-    }
-
-    impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
-        accepts_geography!();
-        fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$geotype<P>> {
-            <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
-        }
-    }
-)}
-
-
+define_geometry_container_type!(LineString of type code 0x02, contains points);
 /// Polygon
 define_geometry_container_type!(Polygon of type code 0x03, contains LineString named rings);
 /// MultiPoint
-// define_geometry_container_type!(MultiPoint of type code 0x04, contains Point named points);
+define_geometry_container_type!(MultiPoint of type code 0x04, contains points);
 /// MultiLineString
 define_geometry_container_type!(MultiLineString of type code 0x05, contains LineString named lines);
 /// MultiPolygon
 define_geometry_container_type!(MultiPolygon of type code 0x06, contains Polygon named polygons);
+
 
 impl<P: ToPoint> fmt::Display for MultiPoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -587,7 +570,7 @@ impl<P: ToPoint> fmt::Display for LineString<P> {
     }
 }
 
-// generic type
+/// Generic Geometry Data Type
 #[derive(Debug)]
 pub enum GeometryType<P> {
     Point(P),
@@ -598,9 +581,6 @@ pub enum GeometryType<P> {
     MultiPolygon(MultiPolygon<P>),
     GeometryCollection(GeometryCollection<P>)
 }
-
-
-
 
 /// GeometryCollection
 #[derive(Debug)]
