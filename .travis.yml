@@ -1,0 +1,15 @@
+language: rust
+rust:
+  - 1.0.0
+env:
+  global:
+    - secure: GnJm2lLeA/ZN9oO4/S4VO38Fue0E+hYvRSL4I8Y2tcgTUANPUiR1vRyDNSEjoUlYfOhJOElaQw6a+UxbzXfTrtfHVg0AAbfsI3Y+jOPlyDZZ+hKIQijDCBQ0LtMSt2Ji4g+IM18LlEUE6KpSaP3v0BZsVdvd+b1EKli2G/8HQCCHBdyOmi1xNbRBV8whO6EVZ3L+xnj0e1Zen3RaVVVnAKliQQCOzcKQX7TQ+pDtc0PyuBx2S0Amf5+O2rVVLa0hGTYtf8u+fw9R1N4yMS7xSvIAT+oBaTxnXLdzAb4txeESQLA7TasuA1RBgtTQ2m0d5ESGlz648ChFIK4xOYZp/sKEM0uUXr4f/WO6d2s1uZOYrbkwN8NcHZBq2yY/78QJ4QL4wjLk9XaONSZcDhRB64weQKoLPe93vH2L2lZgmyVZh8KwaFKA9aAQvzi31lEgu3ldAdVX/cXFS7kLLYEYG7fmpSLXKSPcD8nZ9scsOL61PqwSfngsb1QZOK0p5zart7AxskpsToy4A7OHDn+LkQV6uuWk6oD3wwDCRg5qHWUqm/n/Bn8RhT+d/2zxN8D1WygqPiAp61O0dNIx9HMNl+NOBEspzPXx70H7YoyIYIMDpUumwRXytuxI3E5O5H3/IIyTYthtYnxM9VYTfwloJ9SgCyONnbOaWULhYRIWmMg=
+install:
+  - rustc --version
+script:
+  - cargo build -v
+  - cargo test -v
+  - cargo doc -v
+after_script:
+  - mv ./target/doc ./
+  - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh

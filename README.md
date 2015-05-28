@@ -1,6 +1,8 @@
 # rust-postgis
-postgis helper library.
+PostGIS helper library.
 
+- PostGIS type helper
+- GCJ02 support
 
 Working in progress.
 
