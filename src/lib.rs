@@ -3,7 +3,7 @@
 //  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : PostGIS helper
-//  Time-stamp: <2015-05-27 15:10:18 andelf>
+//  Time-stamp: <2015-05-28 16:08:22 andelf>
 
 #[macro_use(to_sql_checked, accepts)]
 extern crate postgres;
@@ -18,7 +18,7 @@ use postgres::{ToSql, FromSql};
 use postgres::types::{Type, IsNull};
 use postgres::{Result, Error};
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
-
+pub mod mars;
 
 trait Geometry: fmt::Debug + Sized {
     type PointType: ToPoint;
@@ -220,9 +220,22 @@ pub struct Point<S: SRID = WGS84> {
     phantom: PhantomData<S>
 }
 
-impl Point {
-    pub fn new(x: f64, y: f64) -> Point {
+impl<S: SRID> Point<S> {
+    pub fn new(x: f64, y: f64) -> Point<S> {
         Point { x: x, y: y, phantom: PhantomData }
+    }
+}
+
+impl Point<WGS84> {
+    pub fn new_wgs84(x: f64, y: f64) -> Point<WGS84> {
+            Point::new(x, y)
+    }
+    pub fn from_gcj02(x: f64, y: f64) -> Point<WGS84> {
+        let (x0, y0) = mars::to_wgs84(x, y);
+        Point::new(x0, y0)
+    }
+    pub fn to_gcj02(&self) -> (f64, f64) {
+        mars::from_wgs84(self.x, self.y)
     }
 }
 
@@ -234,8 +247,8 @@ pub struct PointZ<S: SRID = WGS84> {
     phantom: PhantomData<S>
 }
 
-impl PointZ {
-    pub fn new(x: f64, y: f64, z: f64) -> PointZ {
+impl<S: SRID> PointZ<S> {
+    pub fn new(x: f64, y: f64, z: f64) -> PointZ<S> {
         PointZ { x: x, y: y, z: z, phantom: PhantomData }
     }
 }
@@ -248,8 +261,8 @@ pub struct PointM<S: SRID = WGS84> {
     phantom: PhantomData<S>
 }
 
-impl PointM {
-    pub fn new(x: f64, y: f64, m: f64) -> PointM {
+impl<S: SRID> PointM<S> {
+    pub fn new(x: f64, y: f64, m: f64) -> PointM<S> {
         PointM { x: x, y: y, m: m, phantom: PhantomData }
     }
 }
@@ -263,8 +276,8 @@ pub struct PointZM<S: SRID = WGS84> {
     phantom: PhantomData<S>
 }
 
-impl PointZM {
-    pub fn new(x: f64, y: f64, z: f64, m: f64) -> PointZM {
+impl<S: SRID> PointZM<S> {
+    pub fn new(x: f64, y: f64, z: f64, m: f64) -> PointZM<S> {
         PointZM { x: x, y: y, z: z, m: m, phantom: PhantomData }
     }
 }
@@ -330,14 +343,14 @@ macro_rules! accepts_geography {
 
 macro_rules! impl_traits_for_point {
     ($ptype:ident) => (
-        impl FromSql for $ptype {
+        impl<S: SRID> FromSql for $ptype<S> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$ptype> {
-                <$ptype as ToPoint>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$ptype<S>> {
+                <$ptype<S> as ToPoint>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
             }
         }
 
-        impl ToSql for $ptype {
+        impl<S: SRID> ToSql for $ptype<S> {
             to_sql_checked!();
             accepts_geography!();
             fn to_sql<W: Write+?Sized>(&self, ty: &Type, out: &mut W) -> Result<IsNull> {
@@ -345,15 +358,15 @@ macro_rules! impl_traits_for_point {
             }
         }
 
-        impl fmt::Display for $ptype {
+        impl<S: SRID> fmt::Display for $ptype<S> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 try!(write!(f, "{}", self.describ()));
                 Ok(())
             }
         }
-        impl fmt::Debug for $ptype {
+        impl<S: SRID> fmt::Debug for $ptype<S> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                match <$ptype as ToPoint>::opt_srid() {
+                match <$ptype<S> as ToPoint>::opt_srid() {
                     Some(srid) =>
                         try!(write!(f, "SRID={};{}", srid, self.describ())),
                     None =>
@@ -697,4 +710,16 @@ impl<P: ToPoint + fmt::Debug> FromSql for GeometryCollection<P> {
     fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<GeometryCollection<P>> {
         <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
     }
+}
+
+#[test]
+fn test_point() {
+    // out of China
+    let p1 = Point::<WGS84>::new(10.2, 20.3);
+    assert_eq!(p1.to_gcj02(), (10.2, 20.3));
+    let p2 = Point::<NoSRID>::new(10.2, 20.3);
+    assert_eq!(format!("{}", p1), "POINT(10.2 20.3)");
+    assert_eq!(format!("{}", p2), "POINT(10.2 20.3)");
+    assert_eq!(format!("{:?}", p1), "SRID=4326;POINT(10.2 20.3)");
+    assert_eq!(format!("{:?}", p2), "POINT(10.2 20.3)");
 }

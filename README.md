@@ -19,6 +19,5 @@ fn main() {
     for row in stmt.query(&[]).unwrap() {
         println!(">>>>>> {}", row.get::<_, LineString<Point>>("route"));
     }
-
 }
 ```
