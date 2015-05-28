@@ -1,19 +1,17 @@
 # rust-postgis
 PostGIS helper library.
 
+[![Build Status](https://travis-ci.org/andelf/rust-postgis.svg?branch=master)](https://travis-ci.org/andelf/rust-postgis)
+
 - PostGIS type helper
 - GCJ02 support
-
-Working in progress.
-
-Not Yet Finished!
-
+- Type-safe SRID support
 
 ## HowTo
 
 ```rust
 use postgres::{Connection, SslMode};
-use postgis::{Point, LineString};
+use postgis::{Point, LineString, WGS843};
 
 fn main() {
     // conn ....
