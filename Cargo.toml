@@ -5,9 +5,10 @@ authors = ["ShuYu Wang <andelf@gmail.com>"]
 description = "An extension to rust-postgres, adds support for PostGIS."
 homepage = "https://github.com/andelf/rust-postgis"
 repository = "https://github.com/andelf/rust-postgis"
+readme = "README.md"
+documentation = "http://www.rust-ci.org/andelf/rust-postgis/doc/postgis/"
 keywords = ["PostgreSQL", "PostGIS", "GIS", "GEO"]
 license = "MIT"
-
 
 [dependencies]
 postgres = "0.8.9"

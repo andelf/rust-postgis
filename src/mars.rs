@@ -3,7 +3,7 @@
 //  Created     : Thu May 28 14:55:36 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : WGS84 GCJ02 conversion for rust
-//  Time-stamp: <2015-05-28 15:48:50 andelf>
+//  Time-stamp: <2015-05-29 00:24:49 andelf>
 
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
@@ -223,8 +223,8 @@ pub fn from_wgs84(x: f64, y: f64) -> (f64, f64) {
 
 // MARS coords to WGS84
 pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
-    let epsilon: f64 = 0.00001;
-
+    let mut epsilon: f64 = 0.00001;
+    epsilon += epsilon / 10.0;  // FIXME: if right?
     fn bisection_find_vals(x: f64, y: f64, x0: f64, y0: f64, x1: f64, y1: f64, epsilon: f64) -> (f64, f64) {
         //let (x_, y_) = (x0 + (x0 - x1).abs() * 0.618, y0 + (y0 - y1).abs() * 0.618);
         let (x_, y_) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
@@ -232,7 +232,6 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
         if (x - x_e).abs() <= epsilon && (y - y_e).abs() <= epsilon {
             return (x_, y_)
         }
-
         let (x_e0, y_e0) = from_wgs84(x0, y0);
         let (x_e1, y_e1) = from_wgs84(x1, y1);
 
@@ -242,10 +241,10 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
 
         if x < x_e0 {
             x_1 = x_0;
-            x_0 -= 0.5;
+            x_0 -= (x_e0 - x);  // instead of 0.5
         } else if x > x_e1 {
             x_0 = x_1;
-            x_1 += 0.5;
+            x_1 += (x - x_e1);
         } else {
             adjusted = false;
         }
@@ -253,10 +252,10 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
         // ----*---y_e0-------y_e----------y_e1--------*--------
         if y < y_e0 {
             y_1 = y_0;
-            y_0 -= 0.5;
+            y_0 -= (y_e0 - y);
         } else if y > y_e1 {
             y_0 = y_1;
-            y_1 += 0.5;
+            y_1 += (y - y_e1);
         } else {
             adjusted |= false;
         }
@@ -281,4 +280,11 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
     }
 
     bisection_find_vals(x, y, x - 0.1, y - 0.1, x + 0.1, y + 0.1, epsilon)
+}
+
+
+#[test]
+fn test_mars_to_wgs84() {
+    let (x, y) = to_wgs84(116.501419, 39.99844);
+    println!("x = {} y = {}", x, y);
 }

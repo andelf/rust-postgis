@@ -2,6 +2,7 @@
 PostGIS helper library.
 
 [![Build Status](https://travis-ci.org/andelf/rust-postgis.svg?branch=master)](https://travis-ci.org/andelf/rust-postgis)
+[![Crates.io](https://meritbadge.herokuapp.com/postgis)](https://crates.io/crates/postgis)
 
 - PostGIS type helper
 - GCJ02 support
