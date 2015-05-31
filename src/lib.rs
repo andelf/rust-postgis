@@ -3,9 +3,9 @@
 //  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : PostGIS helper
-//  Time-stamp: <2015-05-28 23:25:40 andelf>
+//  Time-stamp: <2015-05-31 15:02:17 andelf>
 
-#[macro_use(to_sql_checked, accepts)]
+#[macro_use(to_sql_checked)]
 extern crate postgres;
 extern crate byteorder;
 
@@ -14,9 +14,9 @@ use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use std::iter::FromIterator;
-use postgres::{ToSql, FromSql};
-use postgres::types::{Type, IsNull};
-use postgres::{Result, Error};
+use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo};
+use postgres::error::Error;
+use postgres::Result;
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 pub mod mars;
 
@@ -345,7 +345,7 @@ macro_rules! impl_traits_for_point {
     ($ptype:ident) => (
         impl<S: SRID> FromSql for $ptype<S> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$ptype<S>> {
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<$ptype<S>> {
                 <$ptype<S> as ToPoint>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
             }
         }
@@ -353,7 +353,7 @@ macro_rules! impl_traits_for_point {
         impl<S: SRID> ToSql for $ptype<S> {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, ty: &Type, out: &mut W) -> Result<IsNull> {
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, out: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
                 self.write_ewkb(ty, out)
             }
         }
@@ -442,14 +442,14 @@ macro_rules! define_geometry_container_type {
         impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
                 self.write_ewkb(ty, w)
             }
 
         }
         impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$geotype<P>> {
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<$geotype<P>> {
                 <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
             }
         }
@@ -508,7 +508,7 @@ macro_rules! define_geometry_container_type {
         impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
                 self.write_ewkb(ty, w)
             }
 
@@ -516,7 +516,7 @@ macro_rules! define_geometry_container_type {
 
         impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<$geotype<P>> {
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<$geotype<P>> {
                 <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
             }
         }
@@ -700,14 +700,14 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
 impl<P: ToPoint + fmt::Debug> ToSql for GeometryCollection<P> {
     to_sql_checked!();
     accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W) -> Result<IsNull> {
+    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
         self.write_ewkb(ty, w)
     }
 
 }
 impl<P: ToPoint + fmt::Debug> FromSql for GeometryCollection<P> {
     accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R) -> Result<GeometryCollection<P>> {
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<GeometryCollection<P>> {
         <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
     }
 }

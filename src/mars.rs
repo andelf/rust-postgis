@@ -3,7 +3,7 @@
 //  Created     : Thu May 28 14:55:36 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : WGS84 GCJ02 conversion for rust
-//  Time-stamp: <2015-05-29 00:24:49 andelf>
+//  Time-stamp: <2015-05-31 02:06:52 andelf>
 
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
@@ -241,10 +241,10 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
 
         if x < x_e0 {
             x_1 = x_0;
-            x_0 -= (x_e0 - x);  // instead of 0.5
+            x_0 -= x_e0 - x;  // instead of 0.5
         } else if x > x_e1 {
             x_0 = x_1;
-            x_1 += (x - x_e1);
+            x_1 += x - x_e1;
         } else {
             adjusted = false;
         }
@@ -252,10 +252,10 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
         // ----*---y_e0-------y_e----------y_e1--------*--------
         if y < y_e0 {
             y_1 = y_0;
-            y_0 -= (y_e0 - y);
+            y_0 -= y_e0 - y;
         } else if y > y_e1 {
             y_0 = y_1;
-            y_1 += (y - y_e1);
+            y_1 += y - y_e1;
         } else {
             adjusted |= false;
         }
