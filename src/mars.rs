@@ -3,7 +3,7 @@
 //  Created     : Thu May 28 14:55:36 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : WGS84 GCJ02 conversion for rust
-//  Time-stamp: <2015-06-01 10:41:09 andelf>
+//  Time-stamp: <2015-06-01 10:45:55 andelf>
 
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
@@ -224,15 +224,15 @@ pub fn from_wgs84(x: f64, y: f64) -> (f64, f64) {
 // MARS coords to WGS84
 pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
     // TODO: figure out if it is in China
-    let mut epsilon: f64 = 0.00001;
+    let epsilon: f64 = 0.00001;
     fn bisection_find_vals(x: f64, y: f64, x0: f64, y0: f64, x1: f64, y1: f64, epsilon: f64) -> (f64, f64) {
         let (mut x0, mut y0, mut x1, mut y1) = (x0, y0, x1, y1);
-        let (mut x_, mut y_) = (0f64, 0f64);
+        let (mut x_, mut y_): (f64, f64);
 
         loop {
             x_ = (x0 + x1) / 2.0;
             y_ = (y0 + y1) / 2.0;
-            let (mut x_e, mut y_e)   = from_wgs84(x_, y_);
+            let (x_e, y_e)   = from_wgs84(x_, y_);
 
             // println!("x0: {}, y0: {}, x1: {}, y1: {}", x0, y0, x1, y1);
             // println!("target => {:?}         {:?}", (x,y), (x_e, y_e));
@@ -244,7 +244,6 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
             let (x_e0, y_e0) = from_wgs84(x0, y0);
             let (x_e1, y_e1) = from_wgs84(x1, y1);
 
-            let (mut x_0, mut y_0, mut x_1, mut y_1) = (x0, y0, x1, y1);
             // if over some bound
             let mut adjusted = true;
 
