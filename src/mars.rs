@@ -3,7 +3,7 @@
 //  Created     : Thu May 28 14:55:36 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : WGS84 GCJ02 conversion for rust
-//  Time-stamp: <2015-05-31 02:06:52 andelf>
+//  Time-stamp: <2015-06-01 10:41:09 andelf>
 
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
@@ -223,60 +223,80 @@ pub fn from_wgs84(x: f64, y: f64) -> (f64, f64) {
 
 // MARS coords to WGS84
 pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
+    // TODO: figure out if it is in China
     let mut epsilon: f64 = 0.00001;
-    epsilon += epsilon / 10.0;  // FIXME: if right?
     fn bisection_find_vals(x: f64, y: f64, x0: f64, y0: f64, x1: f64, y1: f64, epsilon: f64) -> (f64, f64) {
-        //let (x_, y_) = (x0 + (x0 - x1).abs() * 0.618, y0 + (y0 - y1).abs() * 0.618);
-        let (x_, y_) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
-        let (x_e, y_e)   = from_wgs84(x_, y_);
-        if (x - x_e).abs() <= epsilon && (y - y_e).abs() <= epsilon {
-            return (x_, y_)
+        let (mut x0, mut y0, mut x1, mut y1) = (x0, y0, x1, y1);
+        let (mut x_, mut y_) = (0f64, 0f64);
+
+        loop {
+            x_ = (x0 + x1) / 2.0;
+            y_ = (y0 + y1) / 2.0;
+            let (mut x_e, mut y_e)   = from_wgs84(x_, y_);
+
+            // println!("x0: {}, y0: {}, x1: {}, y1: {}", x0, y0, x1, y1);
+            // println!("target => {:?}         {:?}", (x,y), (x_e, y_e));
+
+            if (x - x_e).abs() <= epsilon && (y - y_e).abs() <= epsilon {
+                break;
+            }
+
+            let (x_e0, y_e0) = from_wgs84(x0, y0);
+            let (x_e1, y_e1) = from_wgs84(x1, y1);
+
+            let (mut x_0, mut y_0, mut x_1, mut y_1) = (x0, y0, x1, y1);
+            // if over some bound
+            let mut adjusted = true;
+
+            if x < x_e0 {
+                //x1 = x0;
+                x0 -= x_e0 - x;  // instead of 0.5
+            } else if x > x_e1 {
+                //x0 = x1;
+                x1 += x - x_e1;
+            } else {
+                adjusted = false;
+            }
+
+            // ----*---y_e0-------y_e----------y_e1--------*--------
+            if y < y_e0 {
+                //y1 = y0;
+                y0 -= y_e0 - y;
+            } else if y > y_e1 {
+                //y0 = y1;
+                y1 += y - y_e1;
+            } else {
+                adjusted |= false;
+            }
+
+            if adjusted {
+                continue;
+            }
+
+            if x_e0 <= x && x <= x_e {
+                x1 = x_;
+            } else if x_e <= x && x <= x_e1 {
+                x0 = x_;
+            }
+
+            if y_e0 <= y && y <= y_e {
+                y1 = y_;
+            } else if y_e <= y && y <= y_e1 {
+                y0 = y_;
+            }
+
+            if x1 - x0 < epsilon * 0.1 {
+                x0 = x0 - x0 * 0.01;
+                x1 = x1 + x1 * 0.01;
+            }
+            if y1 - y0 < epsilon * 0.1{
+                y0 = y0 - y0 * 0.01;
+                y1 = y1 + y1 * 0.01;
+            }
+
         }
-        let (x_e0, y_e0) = from_wgs84(x0, y0);
-        let (x_e1, y_e1) = from_wgs84(x1, y1);
-
-        let (mut x_0, mut y_0, mut x_1, mut y_1) = (x0, y0, x1, y1);
-        // if over some bound
-        let mut adjusted = true;
-
-        if x < x_e0 {
-            x_1 = x_0;
-            x_0 -= x_e0 - x;  // instead of 0.5
-        } else if x > x_e1 {
-            x_0 = x_1;
-            x_1 += x - x_e1;
-        } else {
-            adjusted = false;
-        }
-
-        // ----*---y_e0-------y_e----------y_e1--------*--------
-        if y < y_e0 {
-            y_1 = y_0;
-            y_0 -= y_e0 - y;
-        } else if y > y_e1 {
-            y_0 = y_1;
-            y_1 += y - y_e1;
-        } else {
-            adjusted |= false;
-        }
-
-        if adjusted {
-            return bisection_find_vals(x, y, x_0, y_0, x_1, y_1, epsilon);
-        }
-
-        if x_e0 <= x && x <= x_e {
-            x_1 = x_;
-        } else if x_e <= x && x <= x_e1 {
-            x_0 = x_;
-        }
-
-        if y_e0 <= y && y <= y_e {
-            y_1 = y_;
-        } else if y_e <= y && y <= y_e1 {
-            y_0 = y_;
-        }
-
-        bisection_find_vals(x, y, x_0, y_0, x_1, y_1, epsilon)
+        //        bisection_find_vals(x, y, x_0, y_0, x_1, y_1, epsilon)
+        (x_, y_)
     }
 
     bisection_find_vals(x, y, x - 0.1, y - 0.1, x + 0.1, y + 0.1, epsilon)
