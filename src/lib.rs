@@ -3,7 +3,7 @@
 //  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : PostGIS helper
-//  Time-stamp: <2015-05-31 15:02:17 andelf>
+//  Time-stamp: <2015-06-11 10:14:34 andelf>
 
 #[macro_use(to_sql_checked)]
 extern crate postgres;
@@ -14,30 +14,65 @@ use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 use std::iter::FromIterator;
+use std::convert::From;
 use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo};
-use postgres::error::Error;
-use postgres::Result;
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 pub mod mars;
+
+#[derive(Debug, )]
+pub enum Error {
+    Read(String),
+    Write(String),
+    Other(String)
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{:?}", self)
+    }
+}
+
+
+impl std::error::Error for Error {
+    fn description(&self) -> &str {
+        match *self {
+            Error::Read(_)  => "postgis error while reading",
+            Error::Write(_) => "postgis error while writing",
+            Error::Other(_) => "postgis unknown error"
+        }
+    }
+}
+
+impl From<byteorder::Error> for Error {
+    fn from(e: byteorder::Error) -> Error {
+        Error::Read(format!("error while reading: {:?}", e))
+    }
+}
+
+impl From<Error> for postgres::error::Error {
+    fn from(e: Error) -> postgres::error::Error {
+        postgres::error::Error::Conversion(Box::new(e))
+    }
+}
 
 trait Geometry: fmt::Debug + Sized {
     type PointType: ToPoint;
     #[inline(always)]
     fn type_id() -> u32;
 
-    fn read_ewkb<R: Read>(raw: &mut R) -> byteorder::Result<Self> {
+    fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         let byte_order = try!(raw.read_i8());
         let is_be = byte_order == 0i8;
 
         let type_id = try!(read_u32(raw, is_be));
         if type_id != Self::type_id() {
-            return Err(byteorder::Error::UnexpectedEOF);
+            return Err(Error::Read("type id not match".into()))
         }
 
         match Self::PointType::opt_srid() {
             Some(srid) => {
                 if try!(read_i32(raw, is_be)) != srid {
-                    return Err(byteorder::Error::UnexpectedEOF);
+                    return Err(Error::Read("srid not match".into()))
                 }
             },
             _ => ()
@@ -45,35 +80,39 @@ trait Geometry: fmt::Debug + Sized {
         Self::read_ewkb_body(raw, is_be)
     }
 
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self>;
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error>;
 
-    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
+    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<(), Error> {
         // use LE
         try!(w.write_u8(0x01));
         let type_id = Self::type_id();
         try!(w.write_u32::<LittleEndian>(type_id));
         Self::PointType::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
         try!(self.write_ewkb_body(w));
-        Ok(IsNull::No)
+        Ok(())
     }
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()>;
-
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error>;
 }
 
-fn read_u32<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<u32> {
-    if is_be { raw.read_u32::<BigEndian>() }
-    else { raw.read_u32::<LittleEndian>() }
+fn read_u32<R: Read>(raw: &mut R, is_be: bool) -> Result<u32, Error> {
+    Ok(try!(
+        if is_be { raw.read_u32::<BigEndian>() }
+        else { raw.read_u32::<LittleEndian>() }
+        ))
 }
 
-fn read_i32<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<i32> {
-    if is_be { raw.read_i32::<BigEndian>() }
-    else { raw.read_i32::<LittleEndian>() }
+fn read_i32<R: Read>(raw: &mut R, is_be: bool) -> Result<i32, Error> {
+    Ok(try!(
+        if is_be { raw.read_i32::<BigEndian>() }
+        else { raw.read_i32::<LittleEndian>() }
+        ))
 }
 
-
-fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<f64> {
-    if is_be { raw.read_f64::<BigEndian>() }
-    else { raw.read_f64::<LittleEndian>() }
+fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
+    Ok(try!(
+        if is_be { raw.read_f64::<BigEndian>() }
+        else { raw.read_f64::<LittleEndian>() }
+        ))
 }
 
 
@@ -142,27 +181,25 @@ trait ToPoint: Sized {
 
     fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self;
 
-    fn read_ewkb<R: Read>(raw: &mut R) -> byteorder::Result<Self> {
+    fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         let byte_order = try!(raw.read_i8());
         let is_be = byte_order == 0i8;
 
         let type_id = try!(read_u32(raw, is_be));
         if type_id != Self::type_id() {
-            return Err(byteorder::Error::UnexpectedEOF);
+            return Err(Error::Read("type id not match".into()))
         }
 
         if Self::opt_srid().is_some() {
             if Self::opt_srid() != Some(try!(read_i32(raw, is_be))) {
-                println!("error: srid not match");
-                // FIXME
-                return Err(byteorder::Error::UnexpectedEOF);
+                return Err(Error::Read("srid not match".into()))
             }
         }
 
         Self::read_ewkb_body(raw, is_be)
     }
 
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
         let x = try!(read_f64(raw, is_be));
         let y = try!(read_f64(raw, is_be));
         let z = if Self::has_z() {
@@ -178,16 +215,16 @@ trait ToPoint: Sized {
         Ok(Self::new_from_opt_vals(x, y, z, m))
     }
 
-    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
+    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<(), Error> {
         // use LE
         try!(w.write_u8(0x01));
         try!(w.write_u32::<LittleEndian>(Self::type_id()));
         Self::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
         try!(self.write_ewkb_body(w));
-        Ok(IsNull::No)
+        Ok(())
     }
 
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         // lol
         let x = unsafe { *mem::transmute::<_, *const f64>(self) };
         let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
@@ -345,16 +382,17 @@ macro_rules! impl_traits_for_point {
     ($ptype:ident) => (
         impl<S: SRID> FromSql for $ptype<S> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<$ptype<S>> {
-                <$ptype<S> as ToPoint>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<$ptype<S>> {
+                <$ptype<S> as ToPoint>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
             }
         }
 
         impl<S: SRID> ToSql for $ptype<S> {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, ty: &Type, out: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
-                self.write_ewkb(ty, out)
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+                try!(self.write_ewkb(ty, out));
+                Ok(IsNull::No)
             }
         }
 
@@ -420,7 +458,7 @@ macro_rules! define_geometry_container_type {
                 (type_id & 0xffff_ff00) | $typecode
             }
 
-            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
                 let mut ret = $geotype::new();
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
@@ -429,7 +467,7 @@ macro_rules! define_geometry_container_type {
                 Ok(ret)
             }
 
-            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
                 try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
                 for point in self.points.iter() {
                     try!(point.write_ewkb_body(w));
@@ -442,15 +480,16 @@ macro_rules! define_geometry_container_type {
         impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
-                self.write_ewkb(ty, w)
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+                try!(self.write_ewkb(ty, w));
+                Ok(IsNull::No)
             }
 
         }
         impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<$geotype<P>> {
-                <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<$geotype<P>> {
+                <Self as Geometry>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
             }
         }
         );
@@ -487,7 +526,7 @@ macro_rules! define_geometry_container_type {
                 let type_id = P::type_id();
                 (type_id & 0xffff_ff00) | $typecode
             }
-            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
                 let mut ret = $geotype::new();
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
@@ -495,7 +534,7 @@ macro_rules! define_geometry_container_type {
                 }
                 Ok(ret)
             }
-            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
                 try!(w.write_u32::<LittleEndian>(self.$itemname.len() as u32));
                 for item in self.$itemname.iter() {
                     try!(item.write_ewkb_body(w));
@@ -508,16 +547,17 @@ macro_rules! define_geometry_container_type {
         impl<P: ToPoint + fmt::Debug> ToSql for $geotype<P> {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
-                self.write_ewkb(ty, w)
+            fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+                try!(self.write_ewkb(ty, w));
+                Ok(IsNull::No)
             }
 
         }
 
         impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<$geotype<P>> {
-                <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<$geotype<P>> {
+                <Self as Geometry>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
             }
         }
     )
@@ -613,17 +653,17 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
         (type_id & 0xffff_ff00) | 0x0000_0007
     }
 
-    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<IsNull> {
+    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<(), Error> {
         // use LE
         try!(w.write_u8(0x01));
         let type_id = Self::type_id();
         try!(w.write_u32::<LittleEndian>(type_id));
         Self::PointType::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
         try!(self.write_ewkb_body(w));
-        Ok(IsNull::No)
+        Ok(())
     }
 
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<()> {
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         try!(w.write_u32::<LittleEndian>(self.geometries.len() as u32));
         for item in self.geometries.iter() {
             let ret = match item {
@@ -640,19 +680,19 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
         }
         Ok(())
     }
-    fn read_ewkb<R: Read>(raw: &mut R) -> byteorder::Result<Self> {
+    fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         let byte_order = try!(raw.read_i8());
         let is_be = byte_order == 0i8;
 
         let type_id = try!(read_u32(raw, is_be));
         if type_id != Self::type_id() {
-            return Err(byteorder::Error::UnexpectedEOF);
+            return Err(Error::Read("type id not match".into()))
         }
 
         match Self::PointType::opt_srid() {
             Some(srid) => {
                 if try!(read_i32(raw, is_be)) != srid {
-                    return Err(byteorder::Error::UnexpectedEOF);
+                    return Err(Error::Read("srid not match".into()))
                 }
             },
             _ => ()
@@ -661,7 +701,7 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
         Self::read_ewkb_body(raw, is_be)
     }
 
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> byteorder::Result<Self> {
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
         let mut ret = GeometryCollection::new();
         let size = try!(read_u32(raw, is_be)) as usize;
         for _ in 0..size {
@@ -669,14 +709,13 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
 
             let type_id = try!(read_u32(raw, is_be));
             if type_id & 0xffff_ff00 != Self::type_id() & 0xffff_ff00 {
-                // should be type error
-                return Err(byteorder::Error::UnexpectedEOF);
+                return Err(Error::Read("type id not match".into()))
             }
 
             match Self::PointType::opt_srid() {
                 Some(srid) => {
                     if try!(read_i32(raw, is_be)) != srid {
-                        return Err(byteorder::Error::UnexpectedEOF);
+                        return Err(Error::Read("srid not match".into()))
                     }
                 },
                 _ => ()
@@ -700,15 +739,16 @@ impl<P: ToPoint + fmt::Debug> Geometry for GeometryCollection<P> {
 impl<P: ToPoint + fmt::Debug> ToSql for GeometryCollection<P> {
     to_sql_checked!();
     accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> Result<IsNull> {
-        self.write_ewkb(ty, w)
+    fn to_sql<W: Write+?Sized>(&self, ty: &Type, w: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+        try!(self.write_ewkb(ty, w));
+        Ok(IsNull::No)
     }
 
 }
 impl<P: ToPoint + fmt::Debug> FromSql for GeometryCollection<P> {
     accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> Result<GeometryCollection<P>> {
-        <Self as Geometry>::read_ewkb(raw).map_err(|_| Error::WrongType(ty.clone()))
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<GeometryCollection<P>> {
+        <Self as Geometry>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
     }
 }
 
