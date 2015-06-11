@@ -1,6 +1,6 @@
 [package]
 name = "postgis"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["ShuYu Wang <andelf@gmail.com>"]
 description = "An extension to rust-postgres, adds support for PostGIS."
 homepage = "https://github.com/andelf/rust-postgis"

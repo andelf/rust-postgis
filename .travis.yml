@@ -11,6 +11,7 @@ script:
   - cargo build -v
   - cargo test -v
   - cargo doc -v
+  - echo '<meta http-equiv=refresh content=0;url=libc/index.html>' > target/doc/index.html
 after_script:
   - mv ./target/doc ./
   - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
