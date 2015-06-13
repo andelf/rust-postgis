@@ -3,7 +3,7 @@
 //  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
 //  Copyright   : Feather Workshop (c) 2015
 //  Description : PostGIS helper
-//  Time-stamp: <2015-06-11 10:14:34 andelf>
+//  Time-stamp: <2015-06-13 19:21:08 andelf>
 
 #[macro_use(to_sql_checked)]
 extern crate postgres;
@@ -372,6 +372,7 @@ macro_rules! accepts_geography {
         fn accepts(ty: &Type) -> bool {
             match ty {
                 &Type::Other(ref t) if t.name() == "geography" => true,
+                &Type::Other(ref t) if t.name() == "geometry"  => true,
                 _ => false
             }
         }
