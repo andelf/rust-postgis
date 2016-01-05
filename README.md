@@ -16,7 +16,7 @@ An extension to rust-postgres, adds support for PostGIS.
 
 ```rust
 use postgres::{Connection, SslMode};
-use postgis::{Point, LineString, WGS843};
+use postgis::{Point, LineString, WGS84};
 
 fn main() {
     // conn ....
