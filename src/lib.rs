@@ -15,7 +15,7 @@ use std::mem;
 use std::marker::PhantomData;
 use std::iter::FromIterator;
 use std::convert::From;
-use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo};
+use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo, WrongType};
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 pub mod mars;
 
@@ -384,7 +384,7 @@ macro_rules! impl_traits_for_point {
         impl<S: SRID> FromSql for $ptype<S> {
             accepts_geography!();
             fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<$ptype<S>> {
-                <$ptype<S> as ToPoint>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
+                <$ptype<S> as ToPoint>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to ToPoint", ty).into(); postgres::error::Error::Conversion(err)})
             }
         }
 
@@ -490,7 +490,7 @@ macro_rules! define_geometry_container_type {
         impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
             accepts_geography!();
             fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<$geotype<P>> {
-                <Self as Geometry>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
+                <Self as Geometry>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Geometry", ty).into(); postgres::error::Error::Conversion(err)})
             }
         }
         );
@@ -558,7 +558,7 @@ macro_rules! define_geometry_container_type {
         impl<P: ToPoint + fmt::Debug> FromSql for $geotype<P> {
             accepts_geography!();
             fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<$geotype<P>> {
-                <Self as Geometry>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
+                <Self as Geometry>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Geometry", ty).into(); postgres::error::Error::Conversion(err)})
             }
         }
     )
@@ -749,7 +749,7 @@ impl<P: ToPoint + fmt::Debug> ToSql for GeometryCollection<P> {
 impl<P: ToPoint + fmt::Debug> FromSql for GeometryCollection<P> {
     accepts_geography!();
     fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<GeometryCollection<P>> {
-        <Self as Geometry>::read_ewkb(raw).map_err(|_| postgres::error::Error::WrongType(ty.clone()))
+        <Self as Geometry>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Geometry", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
