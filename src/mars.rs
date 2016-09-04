@@ -127,12 +127,12 @@ impl Converter {
 fn wgtochina_lb(wg_flag: i32, wg_lng: i32, wg_lat: i32, wg_heit: i32, _wg_week: i32, wg_time: i32) -> (f64, f64) {
     let mut point: (f64, f64) = (wg_lng as f64, wg_lat as f64);
 
-    let mut x1_x2: f64;
-    let mut y1_y2: f64;
-    let mut casm_v: f64;
+    let x1_x2: f64;
+    let y1_y2: f64;
+    let casm_v: f64;
     let mut x_add: f64;
     let mut y_add: f64;
-    let mut h_add: f64;
+    let h_add: f64;
 
     if wg_heit > 5000 {
         return point;

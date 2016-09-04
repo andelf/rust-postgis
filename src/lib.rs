@@ -11,11 +11,10 @@ extern crate byteorder;
 
 use std::io::prelude::*;
 use std::fmt;
-use std::mem;
 use std::marker::PhantomData;
 use std::iter::FromIterator;
 use std::convert::From;
-use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo, WrongType};
+use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo};
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 pub mod mars;
 
@@ -144,111 +143,119 @@ impl SRID for NoSRID {
     fn as_srid() -> Option<i32> { None }
 }
 
+mod detail {
+    use std::io::prelude::*;
+    use std::mem;
+    use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
+    use postgres::types::Type;
+    use super::{Error, SRID, read_f64, read_u32, read_i32};
 
-trait ToPoint: Sized {
-    type SRIDType: SRID;
+    pub trait ToPoint: Sized {
+        type SRIDType: SRID;
 
-    fn type_id() -> u32 {
-        let mut type_ = 0x0000_0001_u32;
-        if Self::opt_srid().is_some() {
-            type_ |= 0x20000000;
-        }
-        if Self::has_z() {
-            type_ |= 0x80000000;
-        }
-        if Self::has_m() {
-            type_ != 0x40000000;
-        }
-        type_
-    }
-    fn opt_srid() -> Option<i32> {
-        Self::SRIDType::as_srid()
-    }
-    fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
-    }
-    fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
-    }
-    fn opt_z(&self) -> Option<f64> {
-        None
-    }
-    fn opt_m(&self) -> Option<f64> {
-        None
-    }
-    fn has_z() -> bool { false }
-    fn has_m() -> bool { false }
-
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self;
-
-    fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
-        let byte_order = try!(raw.read_i8());
-        let is_be = byte_order == 0i8;
-
-        let type_id = try!(read_u32(raw, is_be));
-        if type_id != Self::type_id() {
-            return Err(Error::Read("type id not match".into()))
-        }
-
-        if Self::opt_srid().is_some() {
-            if Self::opt_srid() != Some(try!(read_i32(raw, is_be))) {
-                return Err(Error::Read("srid not match".into()))
+        fn type_id() -> u32 {
+            let mut type_ = 0x0000_0001_u32;
+            if Self::opt_srid().is_some() {
+                type_ |= 0x20000000;
             }
+            if Self::has_z() {
+                type_ |= 0x80000000;
+            }
+            if Self::has_m() {
+                type_ != 0x40000000;
+            }
+            type_
+        }
+        fn opt_srid() -> Option<i32> {
+            Self::SRIDType::as_srid()
+        }
+        fn x(&self) -> f64 {
+            unsafe { *mem::transmute::<_, *const f64>(self) }
+        }
+        fn y(&self) -> f64 {
+            unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+        }
+        fn opt_z(&self) -> Option<f64> {
+            None
+        }
+        fn opt_m(&self) -> Option<f64> {
+            None
+        }
+        fn has_z() -> bool { false }
+        fn has_m() -> bool { false }
+
+        fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self;
+
+        fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
+            let byte_order = try!(raw.read_i8());
+            let is_be = byte_order == 0i8;
+
+            let type_id = try!(read_u32(raw, is_be));
+            if type_id != Self::type_id() {
+                return Err(Error::Read("type id not match".into()))
+            }
+
+            if Self::opt_srid().is_some() {
+                if Self::opt_srid() != Some(try!(read_i32(raw, is_be))) {
+                    return Err(Error::Read("srid not match".into()))
+                }
+            }
+
+            Self::read_ewkb_body(raw, is_be)
         }
 
-        Self::read_ewkb_body(raw, is_be)
-    }
+        fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
+            let x = try!(read_f64(raw, is_be));
+            let y = try!(read_f64(raw, is_be));
+            let z = if Self::has_z() {
+                Some(try!(read_f64(raw, is_be)))
+            } else {
+                None
+            };
+            let m = if Self::has_m() {
+                Some(try!(read_f64(raw, is_be)))
+            } else {
+                None
+            };
+            Ok(Self::new_from_opt_vals(x, y, z, m))
+        }
 
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
-        let x = try!(read_f64(raw, is_be));
-        let y = try!(read_f64(raw, is_be));
-        let z = if Self::has_z() {
-            Some(try!(read_f64(raw, is_be)))
-        } else {
-            None
-        };
-        let m = if Self::has_m() {
-            Some(try!(read_f64(raw, is_be)))
-        } else {
-            None
-        };
-        Ok(Self::new_from_opt_vals(x, y, z, m))
-    }
+        fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<(), Error> {
+            // use LE
+            try!(w.write_u8(0x01));
+            try!(w.write_u32::<LittleEndian>(Self::type_id()));
+            Self::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
+            try!(self.write_ewkb_body(w));
+            Ok(())
+        }
 
-    fn write_ewkb<W: Write+?Sized>(&self, _: &Type, w: &mut W) -> Result<(), Error> {
-        // use LE
-        try!(w.write_u8(0x01));
-        try!(w.write_u32::<LittleEndian>(Self::type_id()));
-        Self::opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        try!(self.write_ewkb_body(w));
-        Ok(())
-    }
+        fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+            // lol
+            let x = unsafe { *mem::transmute::<_, *const f64>(self) };
+            let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
+            try!(w.write_f64::<LittleEndian>(x));
+            try!(w.write_f64::<LittleEndian>(y));
+            self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
+            self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
+            Ok(())
+        }
 
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        // lol
-        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
-        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
-        try!(w.write_f64::<LittleEndian>(x));
-        try!(w.write_f64::<LittleEndian>(y));
-        self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
-        self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
-        Ok(())
-    }
-
-    fn describ(&self) -> String {
-        let mut ret = "POINT".to_string();
-        self.opt_z().map(|_| ret.push_str("Z"));
-        self.opt_m().map(|_| ret.push_str("M"));
-        // lol
-        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
-        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
-        ret.push_str(&format!("({} {}", x, y));
-        self.opt_z().map(|z| ret.push_str(&format!(" {}", z)));
-        self.opt_m().map(|m| ret.push_str(&format!(" {}", m)));
-        ret.push_str(")");
-        ret
+        fn describ(&self) -> String {
+            let mut ret = "POINT".to_string();
+            self.opt_z().map(|_| ret.push_str("Z"));
+            self.opt_m().map(|_| ret.push_str("M"));
+            // lol
+            let x = unsafe { *mem::transmute::<_, *const f64>(self) };
+            let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
+            ret.push_str(&format!("({} {}", x, y));
+            self.opt_z().map(|z| ret.push_str(&format!(" {}", z)));
+            self.opt_m().map(|m| ret.push_str(&format!(" {}", m)));
+            ret.push_str(")");
+            ret
+        }
     }
 }
+use detail::ToPoint;
 
 #[derive(Copy, Clone)]
 pub struct Point<S: SRID = WGS84> {
