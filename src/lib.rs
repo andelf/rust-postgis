@@ -3,5 +3,7 @@ extern crate geo;
 extern crate postgres;
 extern crate byteorder;
 
-pub mod postgis_standalone;
+pub mod error;
+pub mod ewkb;
+pub mod postgis;
 pub mod mars;
