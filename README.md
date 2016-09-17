@@ -10,19 +10,17 @@ An extension to rust-postgres, adds support for PostGIS.
 
 - PostGIS type helper
 - GCJ02 support (used offically in Mainland China)
-- Type-safe SRID support
 
 ## HowTo
 
 ```rust
 use postgres::{Connection, SslMode};
-use postgis::{Point, LineString, WGS84};
+use postgis::EwkbLineString;
 
 fn main() {
     // conn ....
-    let stmt = conn.prepare("SELECT * FROM busline").unwrap();
-    for row in stmt.query(&[]).unwrap() {
-        println!(">>>>>> {}", row.get::<_, LineString<Point>>("route"));
+    for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
+        let route: EwkbLineString = row.get("route");
     }
 }
 ```
