@@ -12,12 +12,23 @@ pub struct EwkbPoint {
     pub srid: Option<i32>,
 }
 
+impl geo::ToGeo<f64> for EwkbPoint {
+    fn to_geo(&self) -> geo::Geometry<f64> {
+        geo::Geometry::Point(self.geom)
+    }
+}
+
 #[derive(Debug)]
 pub struct EwkbLineString {
     pub geom: geo::LineString<f64>,
     pub srid: Option<i32>,
 }
 
+impl geo::ToGeo<f64> for EwkbLineString {
+    fn to_geo(&self) -> geo::Geometry<f64> {
+        geo::Geometry::LineString(self.geom.clone())
+    }
+}
 
 pub trait EwkbGeometryType: fmt::Debug + Sized {
     type PointType: EwkbPointType;

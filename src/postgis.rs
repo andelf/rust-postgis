@@ -30,7 +30,7 @@ macro_rules! accepts_geography {
 impl FromSql for EwkbPoint {
     accepts_geography!();
     fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<EwkbPoint> {
-        EwkbPoint::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to EwkbPoint", ty).into(); postgres::error::Error::Conversion(err)})
+        EwkbPoint::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
@@ -46,7 +46,7 @@ impl ToSql for EwkbPoint {
 impl FromSql for EwkbLineString {
     accepts_geography!();
     fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<EwkbLineString> {
-        EwkbLineString::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to EwkbLineString", ty).into(); postgres::error::Error::Conversion(err)})
+        EwkbLineString::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LINESTRING", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
@@ -179,4 +179,27 @@ mod tests {
         let line = result.iter().map(|r| r.get::<_, EwkbLineString>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", line.geom), "LineString([])");
     }
-} 
+
+    #[test]
+    #[ignore]
+    fn test_examples() {
+        use postgres::{Connection, SslMode};
+        //use postgis::EwkbLineString;
+
+        fn main() {
+            //
+            use ewkb::EwkbLineString;
+            let conn = connect();
+            or_panic!(conn.execute("CREATE TEMPORARY TABLE busline (route geometry(LineString))", &[]));
+            or_panic!(conn.execute("INSERT INTO busline (route) VALUES (ST_GeomFromEWKT('LINESTRING(10 -20, -0 -0.5)'))", &[]));
+            //
+
+            // conn ....
+            for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
+                let route: EwkbLineString = row.get("route");
+            }
+        }
+
+        main();
+    }
+}
