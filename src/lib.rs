@@ -5,5 +5,6 @@ extern crate byteorder;
 
 pub mod error;
 pub mod ewkb;
+pub mod twkb;
 pub mod postgis;
 pub mod mars;
