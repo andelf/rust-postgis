@@ -1,4 +1,5 @@
-use ewkb::{EwkbPoint,EwkbLineString,EwkbGeometryType};
+use ewkb::{EwkbPoint, EwkbLineString, EwkbGeometryType};
+use twkb::{TwkbGeom, TwkbPoint};
 use std;
 use std::io::prelude::*;
 use postgres;
@@ -59,6 +60,28 @@ impl ToSql for EwkbLineString {
     }
 }
 
+// --- TWKB ---
+
+macro_rules! accepts_bytea {
+    () => (
+        fn accepts(ty: &Type) -> bool {
+            match ty {
+                &Type::Bytea  => true,
+                _ => false
+            }
+        }
+    )
+}
+
+
+impl FromSql for TwkbPoint {
+    accepts_bytea!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<TwkbPoint> {
+        TwkbPoint::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -68,6 +91,7 @@ mod tests {
     use std::error::Error;
     use geo::{self,Point, LineString};
     use ewkb::{EwkbPoint,EwkbLineString};
+    use twkb::{TwkbPoint};
 
     macro_rules! or_panic {
         ($e:expr) => (
@@ -145,17 +169,17 @@ mod tests {
     #[ignore]
     fn test_select() {
         let conn = connect();
-        let result = or_panic!(conn.query("SELECT ST_GeomFromEWKT('POINT(10 -20)')", &[]));
+        let result = or_panic!(conn.query("SELECT ('POINT(10 -20)')::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, EwkbPoint>(0)).last().unwrap();
         assert_eq!(point.geom, Point::new(10.0, -20.0));
         assert_eq!(point.srid, None);
 
-        let result = or_panic!(conn.query("SELECT ST_GeomFromEWKT('SRID=4326;POINT(10 -20)')", &[]));
+        let result = or_panic!(conn.query("SELECT 'SRID=4326;POINT(10 -20)'::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, EwkbPoint>(0)).last().unwrap();
         assert_eq!(point.geom, Point::new(10.0, -20.0));
         assert_eq!(point.srid, Some(4326));
 
-        let result = or_panic!(conn.query("SELECT ST_GeomFromText('POINT EMPTY')", &[]));
+        let result = or_panic!(conn.query("SELECT 'POINT EMPTY'::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, EwkbPoint>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point.geom), "Point(Coordinate { x: NaN, y: NaN })");
         assert!(point.geom.x().is_nan());
@@ -165,23 +189,46 @@ mod tests {
         assert_eq!(&format!("{:?}", point), "Some(Err(Conversion(WasNull)))");
 
         let p = |x, y| Point(geo::Coordinate { x: x, y: y });
-        let result = or_panic!(conn.query("SELECT ST_GeomFromEWKT('LINESTRING (10 -20, -0 -0.5)')", &[]));
+        let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, EwkbLineString>(0)).last().unwrap();
         assert_eq!(line.geom, LineString(vec![p(10.0, -20.0), p(0., -0.5)]));
         assert_eq!(line.srid, None);
 
-        let result = or_panic!(conn.query("SELECT ST_GeomFromEWKT('SRID=4326;LINESTRING (10 -20, -0 -0.5)')", &[]));
+        let result = or_panic!(conn.query("SELECT ('SRID=4326;LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, EwkbLineString>(0)).last().unwrap();
         assert_eq!(line.geom, LineString(vec![p(10.0, -20.0), p(0., -0.5)]));
         assert_eq!(line.srid, Some(4326));
 
-        let result = or_panic!(conn.query("SELECT ST_GeomFromText('LINESTRING EMPTY')", &[]));
+        let result = or_panic!(conn.query("SELECT 'LINESTRING EMPTY'::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, EwkbLineString>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", line.geom), "LineString([])");
     }
 
     #[test]
     #[ignore]
+    fn test_twkb() {
+        let conn = connect();
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT(10 -20)'::geometry)", &[]));
+        let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
+        assert_eq!(point.geom, Point::new(10.0, -20.0));
+
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry)", &[]));
+        let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
+        assert_eq!(point.geom, Point::new(10.0, -20.0));
+
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT EMPTY'::geometry)", &[]));
+        let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
+        assert_eq!(&format!("{:?}", point.geom), "Point(Coordinate { x: NaN, y: NaN })");
+        assert!(point.geom.x().is_nan());
+
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB(NULL::geometry(Point))", &[]));
+        let point = result.iter().map(|r| r.get_opt::<_, TwkbPoint>(0)).last().unwrap();
+        assert_eq!(&format!("{:?}", point), "Some(Err(Conversion(WasNull)))");
+    }
+
+    #[test]
+    #[ignore]
+    #[allow(unused_imports,unused_variables)]
     fn test_examples() {
         use postgres::{Connection, SslMode};
         //use postgis::EwkbLineString;
@@ -191,7 +238,7 @@ mod tests {
             use ewkb::EwkbLineString;
             let conn = connect();
             or_panic!(conn.execute("CREATE TEMPORARY TABLE busline (route geometry(LineString))", &[]));
-            or_panic!(conn.execute("INSERT INTO busline (route) VALUES (ST_GeomFromEWKT('LINESTRING(10 -20, -0 -0.5)'))", &[]));
+            or_panic!(conn.execute("INSERT INTO busline (route) VALUES ('LINESTRING(10 -20, -0 -0.5)'::geometry)", &[]));
             //
 
             // conn ....
