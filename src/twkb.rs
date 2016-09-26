@@ -1,10 +1,22 @@
 use geo;
 use std::io::prelude::*;
 use std::fmt;
+use std::mem;
 use std::u8;
 use std::f64;
 use byteorder::ReadBytesExt;
 use error::Error;
+
+#[derive(Debug)]
+pub struct TwkbPoint {
+    pub geom: geo::Point<f64>,
+}
+
+impl geo::ToGeo<f64> for TwkbPoint {
+    fn to_geo(&self) -> geo::Geometry<f64> {
+        geo::Geometry::Point(self.geom)
+    }
+}
 
 #[derive(Default,Debug)]
 pub struct TwkbInfo {
@@ -20,6 +32,8 @@ pub struct TwkbInfo {
 }
 
 pub trait TwkbGeom: fmt::Debug + Sized {
+    type PointType: TwkbPointType;
+
     fn read_twkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         // https://github.com/TWKB/Specification/blob/master/twkb.md
         let mut twkb_info: TwkbInfo = Default::default();
@@ -104,25 +118,51 @@ pub trait TwkbGeom: fmt::Debug + Sized {
     }
 }
 
-#[derive(Debug)]
-pub struct TwkbPoint {
-    pub geom: geo::Point<f64>,
+pub trait TwkbPointType: Sized {
+    fn x(&self) -> f64 {
+        unsafe { *mem::transmute::<_, *const f64>(self) }
+    }
+    fn y(&self) -> f64 {
+        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+    }
+    fn opt_z(&self) -> Option<f64> {
+        None
+    }
+    fn opt_m(&self) -> Option<f64> {
+        None
+    }
+    fn has_z() -> bool { false }
+    fn has_m() -> bool { false }
+
+    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self;
+}
+
+impl TwkbPointType for TwkbPoint {
+    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
+        TwkbPoint { geom: geo::Point::new(x, y) }
+    }
 }
 
 impl TwkbGeom for TwkbPoint {
+    type PointType = TwkbPoint;
+
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: TwkbInfo) -> Result<Self, Error> {
         if twkb_info.is_empty_geom {
             return Ok(TwkbPoint {geom: geo::Point::new(f64::NAN, f64::NAN)});
         }
         let x = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
         let y = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
-        if twkb_info.has_z {
-            let _z = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
-        }
-        if twkb_info.has_m {
-            let _m = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
-        }
-        Ok(TwkbPoint {geom: geo::Point::new(x, y)}) // Self::new_from_opt_vals(x, y, z, m)
+        let z = if twkb_info.has_z {
+            Some(try!(Self::read_varint64_as_f64(raw, twkb_info.precision)))
+        } else {
+            None
+        };
+        let m = if twkb_info.has_m {
+            Some(try!(Self::read_varint64_as_f64(raw, twkb_info.precision)))
+        } else {
+            None
+        };
+        Ok(Self::new_from_opt_vals(x, y, z, m))
     }    
 }
 
