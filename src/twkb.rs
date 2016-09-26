@@ -93,9 +93,9 @@ pub trait TwkbGeom: fmt::Debug + Sized {
 
     fn varint64_to_f64(varint: u64, precision: i8) -> f64 {
         if precision >= 0 {
-            (Self::decode_zig_zag_64(varint) as f64) / 10u8.pow(precision as u32) as f64
+            (Self::decode_zig_zag_64(varint) as f64) / 10u64.pow(precision as u32) as f64
         } else {
-            (Self::decode_zig_zag_64(varint) as f64) * 10u8.pow(precision.abs() as u32) as f64            
+            (Self::decode_zig_zag_64(varint) as f64) * 10u64.pow(precision.abs() as u32) as f64
         }
     }
 
@@ -156,4 +156,8 @@ fn test_twkb_to_geom() {
     let twkb = hex_to_vec("0110"); // SELECT encode(ST_AsTWKB('POINT EMPTY'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: NaN, y: NaN })");
+
+    let twkb = hex_to_vec("a10080897aff91f401"); // SELECT encode(ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry), 'hex')
+    let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10, y: -20 })");
 }
