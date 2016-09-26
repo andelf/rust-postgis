@@ -55,7 +55,7 @@ pub trait TwkbGeom: fmt::Debug + Sized {
         // [bounds]          bbox
         let type_and_prec = try!(raw.read_u8());
         twkb_info.geom_type = type_and_prec & 0x0F;
-        twkb_info.precision = Self::decode_zig_zag_64(((type_and_prec & 0xF0) >> 4) as u64) as i8;
+        twkb_info.precision = decode_zig_zag_64(((type_and_prec & 0xF0) >> 4) as u64) as i8;
         let metadata_header = try!(raw.read_u8());
         let has_bbox = (metadata_header & 0b0001) != 0;
         let has_size_attribute = (metadata_header & 0b0010) != 0;
@@ -70,64 +70,69 @@ pub trait TwkbGeom: fmt::Debug + Sized {
             twkb_info.prec_m = Some((ext_prec_info & 0xE0) >> 5);
         }
         if has_size_attribute {
-            twkb_info.size = Some(try!(Self::read_raw_varint64(raw)));
+            twkb_info.size = Some(try!(read_raw_varint64(raw)));
         }
         if has_bbox {
-            let _xmin = try!(Self::read_int64(raw));
-            let _deltax = try!(Self::read_int64(raw));
-            let _ymin = try!(Self::read_int64(raw));
-            let _deltay = try!(Self::read_int64(raw));
+            let _xmin = try!(read_int64(raw));
+            let _deltax = try!(read_int64(raw));
+            let _ymin = try!(read_int64(raw));
+            let _deltay = try!(read_int64(raw));
             if twkb_info.has_z {
-                let _zmin = try!(Self::read_int64(raw));
-                let _deltaz = try!(Self::read_int64(raw));
+                let _zmin = try!(read_int64(raw));
+                let _deltaz = try!(read_int64(raw));
             }
             if twkb_info.has_m {
-                let _mmin = try!(Self::read_int64(raw));
-                let _deltam = try!(Self::read_int64(raw));
+                let _mmin = try!(read_int64(raw));
+                let _deltam = try!(read_int64(raw));
             }
         }
         Self::read_twkb_body(raw, &twkb_info)
     }
 
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error>;
+}
 
-    fn read_raw_varint64<R: Read>(raw: &mut R) -> Result<u64, Error> {
-        // from rust-protobuf
-        let mut r: u64 = 0;
-        let mut i = 0;
-        loop {
-            if i == 10 {
-                return Err(Error::Read("invalid varint".into()));
-            }
-            let b = try!(raw.read_u8());
-            // TODO: may overflow if i == 9
-            r = r | (((b & 0x7f) as u64) << (i * 7));
-            i += 1;
-            if b < 0x80 {
-                return Ok(r);
-            }
+// --- helper functions for reading ---
+
+fn read_raw_varint64<R: Read>(raw: &mut R) -> Result<u64, Error> {
+    // from rust-protobuf
+    let mut r: u64 = 0;
+    let mut i = 0;
+    loop {
+        if i == 10 {
+            return Err(Error::Read("invalid varint".into()));
         }
-    }
-    fn read_int64<R: Read>(raw: &mut R) -> Result<i64, Error> {
-        Self::read_raw_varint64(raw).map(|v| v as i64)
-    }
-
-    fn decode_zig_zag_64(n: u64) -> i64 {
-        ((n >> 1) as i64) ^ (-((n & 1) as i64))
-    }
-
-    fn varint64_to_f64(varint: u64, precision: i8) -> f64 {
-        if precision >= 0 {
-            (Self::decode_zig_zag_64(varint) as f64) / 10u64.pow(precision as u32) as f64
-        } else {
-            (Self::decode_zig_zag_64(varint) as f64) * 10u64.pow(precision.abs() as u32) as f64
+        let b = try!(raw.read_u8());
+        // TODO: may overflow if i == 9
+        r = r | (((b & 0x7f) as u64) << (i * 7));
+        i += 1;
+        if b < 0x80 {
+            return Ok(r);
         }
-    }
-
-    fn read_varint64_as_f64<R: Read>(raw: &mut R, precision: i8) -> Result<f64, Error> {
-        Self::read_raw_varint64(raw).map(|v| Self::varint64_to_f64(v, precision))
     }
 }
+
+fn read_int64<R: Read>(raw: &mut R) -> Result<i64, Error> {
+    read_raw_varint64(raw).map(|v| v as i64)
+}
+
+fn decode_zig_zag_64(n: u64) -> i64 {
+    ((n >> 1) as i64) ^ (-((n & 1) as i64))
+}
+
+fn varint64_to_f64(varint: u64, precision: i8) -> f64 {
+    if precision >= 0 {
+        (decode_zig_zag_64(varint) as f64) / 10u64.pow(precision as u32) as f64
+    } else {
+        (decode_zig_zag_64(varint) as f64) * 10u64.pow(precision.abs() as u32) as f64
+    }
+}
+
+fn read_varint64_as_f64<R: Read>(raw: &mut R, precision: i8) -> Result<f64, Error> {
+    read_raw_varint64(raw).map(|v| varint64_to_f64(v, precision))
+}
+
+// ---
 
 pub trait TwkbPointType: Sized {
     fn x(&self) -> f64 {
@@ -161,15 +166,15 @@ impl TwkbGeom for TwkbPoint {
         if twkb_info.is_empty_geom {
             return Ok(TwkbPoint {geom: geo::Point::new(f64::NAN, f64::NAN)});
         }
-        let x = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
-        let y = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+        let x = try!(read_varint64_as_f64(raw, twkb_info.precision));
+        let y = try!(read_varint64_as_f64(raw, twkb_info.precision));
         let z = if twkb_info.has_z {
-            Some(try!(Self::read_varint64_as_f64(raw, twkb_info.precision)))
+            Some(try!(read_varint64_as_f64(raw, twkb_info.precision)))
         } else {
             None
         };
         let m = if twkb_info.has_m {
-            Some(try!(Self::read_varint64_as_f64(raw, twkb_info.precision)))
+            Some(try!(read_varint64_as_f64(raw, twkb_info.precision)))
         } else {
             None
         };
@@ -186,22 +191,22 @@ impl TwkbGeom for TwkbLineString {
         // pointarray        varint[]
         let mut points: Vec<geo::Point<f64>> = vec![];
         if !twkb_info.is_empty_geom {
-            let npoints = try!(Self::read_raw_varint64(raw));
+            let npoints = try!(read_raw_varint64(raw));
             let mut x = 0.0;
             let mut y = 0.0;
             let mut z = if twkb_info.has_z { Some(0.0) } else { None };
             let mut m = if twkb_info.has_m { Some(0.0) } else { None };
             for _ in 0..npoints {
-                let dx = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                let dx = try!(read_varint64_as_f64(raw, twkb_info.precision));
                 x += dx;
-                let dy = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                let dy = try!(read_varint64_as_f64(raw, twkb_info.precision));
                 y += dy;
                 if twkb_info.has_z {
-                    let dz = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                    let dz = try!(read_varint64_as_f64(raw, twkb_info.precision));
                     z = z.map(|v| v + dz);
                 };
                 if twkb_info.has_m {
-                    let dm = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                    let dm = try!(read_varint64_as_f64(raw, twkb_info.precision));
                     m = m.map(|v| v + dm);
                 };
 
