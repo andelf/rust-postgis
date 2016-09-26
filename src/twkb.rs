@@ -18,6 +18,17 @@ impl geo::ToGeo<f64> for TwkbPoint {
     }
 }
 
+#[derive(Debug)]
+pub struct TwkbLineString {
+    pub geom: geo::LineString<f64>,
+}
+
+impl geo::ToGeo<f64> for TwkbLineString {
+    fn to_geo(&self) -> geo::Geometry<f64> {
+        geo::Geometry::LineString(self.geom.clone())
+    }
+}
+
 #[derive(Default,Debug)]
 pub struct TwkbInfo {
     geom_type: u8,
@@ -75,10 +86,10 @@ pub trait TwkbGeom: fmt::Debug + Sized {
                 let _deltam = try!(Self::read_int64(raw));
             }
         }
-        Self::read_twkb_body(raw, twkb_info)
+        Self::read_twkb_body(raw, &twkb_info)
     }
 
-    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: TwkbInfo) -> Result<Self, Error>;
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error>;
 
     fn read_raw_varint64<R: Read>(raw: &mut R) -> Result<u64, Error> {
         // from rust-protobuf
@@ -146,7 +157,7 @@ impl TwkbPointType for TwkbPoint {
 impl TwkbGeom for TwkbPoint {
     type PointType = TwkbPoint;
 
-    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: TwkbInfo) -> Result<Self, Error> {
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
         if twkb_info.is_empty_geom {
             return Ok(TwkbPoint {geom: geo::Point::new(f64::NAN, f64::NAN)});
         }
@@ -165,6 +176,42 @@ impl TwkbGeom for TwkbPoint {
         Ok(Self::new_from_opt_vals(x, y, z, m))
     }    
 }
+
+
+impl TwkbGeom for TwkbLineString {
+    type PointType = TwkbPoint;
+
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
+        // npoints           uvarint
+        // pointarray        varint[]
+        let mut points: Vec<geo::Point<f64>> = vec![];
+        if !twkb_info.is_empty_geom {
+            let npoints = try!(Self::read_raw_varint64(raw));
+            let mut x = 0.0;
+            let mut y = 0.0;
+            let mut z = if twkb_info.has_z { Some(0.0) } else { None };
+            let mut m = if twkb_info.has_m { Some(0.0) } else { None };
+            for _ in 0..npoints {
+                let dx = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                x += dx;
+                let dy = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                y += dy;
+                if twkb_info.has_z {
+                    let dz = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                    z = z.map(|v| v + dz);
+                };
+                if twkb_info.has_m {
+                    let dm = try!(Self::read_varint64_as_f64(raw, twkb_info.precision));
+                    m = m.map(|v| v + dm);
+                };
+
+                points.push(TwkbPoint::new_from_opt_vals(x, y, z, m).geom);
+            }
+        }
+        Ok(TwkbLineString {geom: geo::LineString(points)})
+    }
+}
+
 
 #[cfg(test)]
 fn hex_to_vec(hexstr: &str) -> Vec<u8> {
@@ -200,4 +247,16 @@ fn test_twkb_to_geom() {
     let twkb = hex_to_vec("a10080897aff91f401"); // SELECT encode(ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10, y: -20 })");
+
+    let twkb = hex_to_vec("02000214271326"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry), 'hex')
+    let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", line.geom), "LineString([Point(Coordinate { x: 10, y: -20 }), Point(Coordinate { x: 0, y: -1 })])");
+
+    let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
+    let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", line.geom), "LineString([Point(Coordinate { x: 10, y: -20 }), Point(Coordinate { x: 0, y: -0.5 })])");
+
+    let twkb = hex_to_vec("0210"); // SELECT encode(ST_AsTWKB('LINESTRING EMPTY'::geometry), 'hex')
+    let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", line.geom), "LineString([])");
 }

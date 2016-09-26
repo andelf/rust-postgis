@@ -1,5 +1,5 @@
 use ewkb::{EwkbPoint, EwkbLineString, EwkbGeometryType};
-use twkb::{TwkbGeom, TwkbPoint};
+use twkb::{TwkbGeom, TwkbPoint, TwkbLineString};
 use std;
 use std::io::prelude::*;
 use postgres;
@@ -81,6 +81,12 @@ impl FromSql for TwkbPoint {
     }
 }
 
+impl FromSql for TwkbLineString {
+    accepts_bytea!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<TwkbLineString> {
+        TwkbLineString::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
+    }
+}
 
 
 #[cfg(test)]
@@ -89,9 +95,9 @@ mod tests {
     use postgres::Connection;
     use std::env;
     use std::error::Error;
-    use geo::{self,Point, LineString};
-    use ewkb::{EwkbPoint,EwkbLineString};
-    use twkb::{TwkbPoint};
+    use geo::{self, Point, LineString};
+    use ewkb::{EwkbPoint, EwkbLineString};
+    use twkb::{TwkbPoint, TwkbLineString};
 
     macro_rules! or_panic {
         ($e:expr) => (
@@ -224,6 +230,10 @@ mod tests {
         let result = or_panic!(conn.query("SELECT ST_AsTWKB(NULL::geometry(Point))", &[]));
         let point = result.iter().map(|r| r.get_opt::<_, TwkbPoint>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point), "Some(Err(Conversion(WasNull)))");
+
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
+        let line = result.iter().map(|r| r.get::<_, TwkbLineString>(0)).last().unwrap();
+        assert_eq!(&format!("{:?}", line.geom), "LineString([Point(Coordinate { x: 10, y: -20 }), Point(Coordinate { x: 0, y: -0.5 })])");
     }
 
     #[test]
