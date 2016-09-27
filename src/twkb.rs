@@ -1,7 +1,7 @@
 use geo;
+use types::{Point};
 use std::io::prelude::*;
 use std::fmt;
-use std::mem;
 use std::u8;
 use std::f64;
 use byteorder::ReadBytesExt;
@@ -43,7 +43,7 @@ pub struct TwkbInfo {
 }
 
 pub trait TwkbGeom: fmt::Debug + Sized {
-    type PointType: TwkbPointType;
+    type PointType: Point;
 
     fn read_twkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         // https://github.com/TWKB/Specification/blob/master/twkb.md
@@ -134,26 +134,7 @@ fn read_varint64_as_f64<R: Read>(raw: &mut R, precision: i8) -> Result<f64, Erro
 
 // ---
 
-pub trait TwkbPointType: Sized {
-    fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
-    }
-    fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
-    }
-    fn opt_z(&self) -> Option<f64> {
-        None
-    }
-    fn opt_m(&self) -> Option<f64> {
-        None
-    }
-    fn has_z() -> bool { false }
-    fn has_m() -> bool { false }
-
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self;
-}
-
-impl TwkbPointType for TwkbPoint {
+impl Point for TwkbPoint {
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
         TwkbPoint { geom: geo::Point::new(x, y) }
     }

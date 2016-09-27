@@ -1,4 +1,5 @@
 use geo;
+use types::{Point};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -31,7 +32,7 @@ impl geo::ToGeo<f64> for EwkbLineString {
 }
 
 pub trait EwkbGeometryType: fmt::Debug + Sized {
-    type PointType: EwkbPointType;
+    type PointType: Point;
 
     fn opt_srid(&self) -> Option<i32> {
         None
@@ -104,26 +105,6 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
 }
 
 
-pub trait EwkbPointType: Sized {
-    fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
-    }
-    fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
-    }
-    fn opt_z(&self) -> Option<f64> {
-        None
-    }
-    fn opt_m(&self) -> Option<f64> {
-        None
-    }
-    fn has_z() -> bool { false }
-    fn has_m() -> bool { false }
-
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self;
-}
-
-
 impl EwkbPoint {
     fn wkb_type_id(has_srid: bool) -> u32 {
         let mut type_ = 0x0000_0001_u32;
@@ -140,7 +121,7 @@ impl EwkbPoint {
     }
 }
 
-impl EwkbPointType for EwkbPoint {
+impl Point for EwkbPoint {
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
         EwkbPoint { srid: None, geom: geo::Point::new(x, y) }
     }
