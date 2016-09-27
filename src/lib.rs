@@ -4,6 +4,7 @@ extern crate postgres;
 extern crate byteorder;
 
 pub mod error;
+pub mod types;
 pub mod ewkb;
 pub mod twkb;
 pub mod postgis;
