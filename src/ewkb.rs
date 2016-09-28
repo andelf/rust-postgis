@@ -106,6 +106,8 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
 
 
 impl EwkbPoint {
+    fn has_z() -> bool { false }
+    fn has_m() -> bool { false }
     fn wkb_type_id(has_srid: bool) -> u32 {
         let mut type_ = 0x0000_0001_u32;
         if has_srid {
@@ -119,11 +121,17 @@ impl EwkbPoint {
         }
         type_
     }
+    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
+        EwkbPoint { srid: None, geom: geo::Point::new(x, y) }
+    }
 }
 
 impl Point for EwkbPoint {
-    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
-        EwkbPoint { srid: None, geom: geo::Point::new(x, y) }
+    fn x(&self) -> f64 {
+        unsafe { *mem::transmute::<_, *const f64>(self) }
+    }
+    fn y(&self) -> f64 {
+        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
     }
 }
 
