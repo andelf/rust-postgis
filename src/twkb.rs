@@ -1,6 +1,6 @@
-use geo;
-use types::{Point};
+use types::{Point, Points, LineString};
 use std::io::prelude::*;
+use std::mem;
 use std::fmt;
 use std::u8;
 use std::f64;
@@ -9,25 +9,30 @@ use error::Error;
 
 #[derive(Debug)]
 pub struct TwkbPoint {
-    pub geom: geo::Point<f64>,
+    x: f64,
+    y: f64
 }
 
+/*
 impl geo::ToGeo<f64> for TwkbPoint {
     fn to_geo(&self) -> geo::Geometry<f64> {
         geo::Geometry::Point(self.geom)
     }
 }
+*/
 
 #[derive(Debug)]
 pub struct TwkbLineString {
-    pub geom: geo::LineString<f64>,
+    pub points: Vec<TwkbPoint>,
 }
 
+/*
 impl geo::ToGeo<f64> for TwkbLineString {
     fn to_geo(&self) -> geo::Geometry<f64> {
         geo::Geometry::LineString(self.geom.clone())
     }
 }
+*/
 
 #[derive(Default,Debug)]
 pub struct TwkbInfo {
@@ -134,9 +139,20 @@ fn read_varint64_as_f64<R: Read>(raw: &mut R, precision: i8) -> Result<f64, Erro
 
 // ---
 
-impl Point for TwkbPoint {
+impl TwkbPoint {
+    fn has_z() -> bool { false }
+    fn has_m() -> bool { false }
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
-        TwkbPoint { geom: geo::Point::new(x, y) }
+        TwkbPoint { x: x, y: y }
+    }
+}
+
+impl Point for TwkbPoint {
+    fn x(&self) -> f64 {
+        unsafe { *mem::transmute::<_, *const f64>(self) }
+    }
+    fn y(&self) -> f64 {
+        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
     }
 }
 
@@ -145,7 +161,7 @@ impl TwkbGeom for TwkbPoint {
 
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
         if twkb_info.is_empty_geom {
-            return Ok(TwkbPoint {geom: geo::Point::new(f64::NAN, f64::NAN)});
+            return Ok(TwkbPoint::new_from_opt_vals(f64::NAN, f64::NAN, None, None));
         }
         let x = try!(read_varint64_as_f64(raw, twkb_info.precision));
         let y = try!(read_varint64_as_f64(raw, twkb_info.precision));
@@ -170,7 +186,7 @@ impl TwkbGeom for TwkbLineString {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
         // npoints           uvarint
         // pointarray        varint[]
-        let mut points: Vec<geo::Point<f64>> = vec![];
+        let mut points: Vec<TwkbPoint> = vec![];
         if !twkb_info.is_empty_geom {
             let npoints = try!(read_raw_varint64(raw));
             let mut x = 0.0;
@@ -191,10 +207,17 @@ impl TwkbGeom for TwkbLineString {
                     m = m.map(|v| v + dm);
                 };
 
-                points.push(TwkbPoint::new_from_opt_vals(x, y, z, m).geom);
+                points.push(TwkbPoint::new_from_opt_vals(x, y, z, m));
             }
         }
-        Ok(TwkbLineString {geom: geo::LineString(points)})
+        Ok(TwkbLineString {points: points})
+    }
+}
+
+impl<'a> LineString<'a> for TwkbLineString {
+    type PointType = TwkbPoint;
+    fn points(&'a self) -> Points<'a, Self::PointType> {
+        Points { iter: self.points.iter() }
     }
 }
 
@@ -212,37 +235,37 @@ fn hex_to_vec(hexstr: &str) -> Vec<u8> {
 fn test_twkb_to_geom() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10, y: -20 })");
+    assert_eq!(format!("{:?}", point), "TwkbPoint { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("0108011427c601"); // SELECT encode(ST_AsTWKB('POINT(10 -20 99)'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10, y: -20 })");
+    assert_eq!(format!("{:?}", point), "TwkbPoint { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("2100ca019503"); // SELECT encode(ST_AsTWKB('POINT(10.12 -20.34)'::geometry, 1), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10.1, y: -20.3 })");
+    assert_eq!(format!("{:?}", point), "TwkbPoint { x: 10.1, y: -20.3 }");
 
     let twkb = hex_to_vec("11000203"); // SELECT encode(ST_AsTWKB('POINT(11.12 -22.34)'::geometry, -1), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10, y: -20 })");
+    assert_eq!(format!("{:?}", point), "TwkbPoint { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("0110"); // SELECT encode(ST_AsTWKB('POINT EMPTY'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: NaN, y: NaN })");
+    assert_eq!(format!("{:?}", point), "TwkbPoint { x: NaN, y: NaN }");
 
     let twkb = hex_to_vec("a10080897aff91f401"); // SELECT encode(ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point.geom), "Point(Coordinate { x: 10, y: -20 })");
+    assert_eq!(format!("{:?}", point), "TwkbPoint { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("02000214271326"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry), 'hex')
     let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line.geom), "LineString([Point(Coordinate { x: 10, y: -20 }), Point(Coordinate { x: 0, y: -1 })])");
+    assert_eq!(format!("{:?}", line), "TwkbLineString { points: [TwkbPoint { x: 10, y: -20 }, TwkbPoint { x: 0, y: -1 }] }");
 
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line.geom), "LineString([Point(Coordinate { x: 10, y: -20 }), Point(Coordinate { x: 0, y: -0.5 })])");
+    assert_eq!(format!("{:?}", line), "TwkbLineString { points: [TwkbPoint { x: 10, y: -20 }, TwkbPoint { x: 0, y: -0.5 }] }");
 
     let twkb = hex_to_vec("0210"); // SELECT encode(ST_AsTWKB('LINESTRING EMPTY'::geometry), 'hex')
     let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line.geom), "LineString([])");
+    assert_eq!(format!("{:?}", line), "TwkbLineString { points: [] }");
 }
