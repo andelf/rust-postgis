@@ -1,4 +1,5 @@
 use std::slice::Iter;
+use geo;
 
 pub trait Point {
     fn x(&self) -> f64;
@@ -31,5 +32,13 @@ impl<'a, T> Iterator for Points<'a, T> where T: 'a + Point {
     type Item = &'a Point;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next().map(|it| it as &Point)
+    }
+}
+
+// --- ToGeo impl
+
+impl geo::ToGeo<f64> for Point {
+    fn to_geo(&self) -> geo::Geometry<f64> {
+        geo::Geometry::Point(geo::Point::new(self.x(), self.y()))
     }
 }

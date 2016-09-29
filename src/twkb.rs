@@ -13,26 +13,10 @@ pub struct TwkbPoint {
     pub y: f64
 }
 
-/*
-impl geo::ToGeo<f64> for TwkbPoint {
-    fn to_geo(&self) -> geo::Geometry<f64> {
-        geo::Geometry::Point(self.geom)
-    }
-}
-*/
-
 #[derive(PartialEq, Clone, Debug)]
 pub struct TwkbLineString {
     pub points: Vec<TwkbPoint>,
 }
-
-/*
-impl geo::ToGeo<f64> for TwkbLineString {
-    fn to_geo(&self) -> geo::Geometry<f64> {
-        geo::Geometry::LineString(self.geom.clone())
-    }
-}
-*/
 
 #[derive(Default,Debug)]
 pub struct TwkbInfo {
