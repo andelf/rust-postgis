@@ -217,15 +217,16 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT(10 -20)'::geometry)", &[]));
         let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
-        //FIXME: assert_eq!(point, Point::new(10.0, -20.0));
+        assert_eq!(point, TwkbPoint {x: 10.0, y: -20.0});
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry)", &[]));
         let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
-        //FIXME: assert_eq!(point, Point::new(10.0, -20.0));
+        assert_eq!(point, TwkbPoint {x: 10.0, y: -20.0});
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT EMPTY'::geometry)", &[]));
-        let point = &result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap() as &types::Point;
-        //FIXME: assert_eq!(&format!("{:?}", point), "Point(Coordinate { x: NaN, y: NaN })");
+        let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
+        assert_eq!(&format!("{:?}", point), "TwkbPoint { x: NaN, y: NaN }");
+        let point = &point as &types::Point;
         assert!(point.x().is_nan());
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB(NULL::geometry(Point))", &[]));
