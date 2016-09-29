@@ -1,4 +1,3 @@
-use geo;
 use types::{Point};
 use std::io::prelude::*;
 use std::mem;
@@ -7,28 +6,17 @@ use byteorder::{self,ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use error::Error;
 
 
-#[derive(Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct EwkbPoint {
-    pub geom: geo::Point<f64>,
+    pub x: f64,
+    pub y: f64,
     pub srid: Option<i32>,
 }
 
-impl geo::ToGeo<f64> for EwkbPoint {
-    fn to_geo(&self) -> geo::Geometry<f64> {
-        geo::Geometry::Point(self.geom)
-    }
-}
-
-#[derive(Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct EwkbLineString {
-    pub geom: geo::LineString<f64>,
+    pub points: Vec<EwkbPoint>,
     pub srid: Option<i32>,
-}
-
-impl geo::ToGeo<f64> for EwkbLineString {
-    fn to_geo(&self) -> geo::Geometry<f64> {
-        geo::Geometry::LineString(self.geom.clone())
-    }
 }
 
 pub trait EwkbGeometryType: fmt::Debug + Sized {
@@ -122,7 +110,7 @@ impl EwkbPoint {
         type_
     }
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
-        EwkbPoint { srid: None, geom: geo::Point::new(x, y) }
+        EwkbPoint { x: x, y: y, srid: None }
     }
 }
 
@@ -201,19 +189,18 @@ impl EwkbGeometryType for EwkbLineString {
     }
 
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
-        let mut points: Vec<geo::Point<f64>> = vec![];
+        let mut points: Vec<EwkbPoint> = vec![];
         let size = try!(read_u32(raw, is_be)) as usize;
         for _ in 0..size {
-            points.push(EwkbPoint::read_ewkb_body(raw, is_be).unwrap().geom);
+            points.push(EwkbPoint::read_ewkb_body(raw, is_be).unwrap());
         }
-        Ok(EwkbLineString {srid: None, geom: geo::LineString(points)})
+        Ok(EwkbLineString {points: points, srid: None})
     }
 
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        let ref points = self.geom.0;
-        try!(w.write_u32::<LittleEndian>(points.len() as u32));
-        for point in points.iter() {
-            let wkb = EwkbPoint { srid: None, geom: point.clone() };
+        try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
+        for point in self.points.iter() {
+            let wkb = EwkbPoint { x: point.x, y: point.y, srid: None };
             try!(wkb.write_ewkb_body(w));
         }
         Ok(())
@@ -223,23 +210,21 @@ impl EwkbGeometryType for EwkbLineString {
 
 #[test]
 fn test_geom_to_wkb() {
-    use geo::{Point,LineString};
-
     // 'POINT (10 -20)'
-    let point = EwkbPoint { srid: None, geom: Point::new(10.0, -20.0) };
+    let point = EwkbPoint { x: 10.0, y: -20.0, srid: None };
     assert_eq!(point.to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
 
     // 'SRID=4326;POINT (10 -20)'
-    let point = EwkbPoint { srid: Some(4326), geom: Point::new(10.0, -20.0) };
+    let point = EwkbPoint { x: 10.0, y: -20.0, srid: Some(4326) };
     assert_eq!(point.to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
 
-    let p = |x, y| Point(geo::Coordinate { x: x, y: y });
+    let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
     // 'LINESTRING (10 -20, -0 -0.5)'
-    let line = EwkbLineString {srid: None, geom: LineString(vec![p(10.0, -20.0), p(0., -0.5)])};
+    let line = EwkbLineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
     // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
-    let line = EwkbLineString {srid: Some(4326), geom: LineString(vec![p(10.0, -20.0), p(0., -0.5)])};
+    let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
 
