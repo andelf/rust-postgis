@@ -7,10 +7,10 @@ use std::f64;
 use byteorder::ReadBytesExt;
 use error::Error;
 
-#[derive(Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct TwkbPoint {
-    x: f64,
-    y: f64
+    pub x: f64,
+    pub y: f64
 }
 
 /*
@@ -21,7 +21,7 @@ impl geo::ToGeo<f64> for TwkbPoint {
 }
 */
 
-#[derive(Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct TwkbLineString {
     pub points: Vec<TwkbPoint>,
 }
