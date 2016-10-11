@@ -14,25 +14,24 @@ pub trait Point {
     //fn has_m() -> bool { false }
 }
 
-/// Iterator for points of a line
-pub struct Points<'a, T: 'a + Point>
-{
-    pub iter: Iter<'a, T>
+/// Iterator for points of line or multi-point geometry
+pub trait Points<'a> {
+    type ItemType: 'a + Point;
+    type Iter: Iterator<Item=&'a Self::ItemType>;
+    fn points(&'a self) -> Self::Iter;
 }
 
-pub trait LineString<'a> {
-    type PointType: Point;
-
-    fn points(&'a self) -> Points<'a, Self::PointType>;
+pub trait LineString<'a>: Points<'a> {
 }
 
-// --- Iterator impl
+/// Iterator for lines of multi-lines
+pub trait Lines<'a> {
+    type ItemType: 'a + LineString<'a>;
+    type Iter: Iterator<Item=&'a Self::ItemType>;
+    fn lines(&'a self) -> Self::Iter;
+}
 
-impl<'a, T> Iterator for Points<'a, T> where T: 'a + Point {
-    type Item = &'a Point;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|it| it as &Point)
-    }
+pub trait MultiLineString<'a>: Lines<'a> {
 }
 
 // --- ToGeo impl
