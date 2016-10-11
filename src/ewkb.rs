@@ -151,15 +151,6 @@ impl EwkbGeometryType for EwkbPoint {
         Ok(Self::new_from_opt_vals(x, y, z, m))
     }
 
-    fn write_ewkb<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        // use LE
-        try!(w.write_u8(0x01));
-        try!(w.write_u32::<LittleEndian>(self.type_id()));
-        self.opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        try!(self.write_ewkb_body(w));
-        Ok(())
-    }
-
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         // lol
         let x = unsafe { *mem::transmute::<_, *const f64>(self) };
