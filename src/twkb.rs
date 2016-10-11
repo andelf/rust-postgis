@@ -4,6 +4,7 @@ use std::mem;
 use std::fmt;
 use std::u8;
 use std::f64;
+use std::slice::Iter;
 use byteorder::ReadBytesExt;
 use error::Error;
 
@@ -198,12 +199,15 @@ impl TwkbGeom for TwkbLineString {
     }
 }
 
-impl<'a> LineString<'a> for TwkbLineString {
-    type PointType = TwkbPoint;
-    fn points(&'a self) -> Points<'a, Self::PointType> {
-        Points { iter: self.points.iter() }
+impl<'a> Points<'a> for TwkbLineString {
+    type ItemType = TwkbPoint;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn points(&'a self) -> Self::Iter {
+        self.points.iter()
     }
 }
+
+impl<'a> LineString<'a> for TwkbLineString {}
 
 
 #[cfg(test)]
