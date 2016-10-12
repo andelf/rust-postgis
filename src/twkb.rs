@@ -1,4 +1,4 @@
-use types::{Point, Points, LineString};
+use types::{Point, Points, LineString, AsEwkbPoint, AsEwkbLineString, EwkbPointGeom, EwkbLineStringGeom};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -125,8 +125,6 @@ fn read_varint64_as_f64<R: Read>(raw: &mut R, precision: i8) -> Result<f64, Erro
 // ---
 
 impl TwkbPoint {
-    fn has_z() -> bool { false }
-    fn has_m() -> bool { false }
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
         TwkbPoint { x: x, y: y }
     }
@@ -164,6 +162,12 @@ impl TwkbGeom for TwkbPoint {
     }    
 }
 
+impl<'a> AsEwkbPoint<'a> for TwkbPoint {
+    fn as_ewkb(&'a self) -> EwkbPointGeom<'a> {
+        EwkbPointGeom { geom: self, srid: None }
+    }
+}
+
 
 impl TwkbGeom for TwkbLineString {
     type PointType = TwkbPoint;
@@ -198,6 +202,16 @@ impl TwkbGeom for TwkbLineString {
         Ok(TwkbLineString {points: points})
     }
 }
+
+
+impl<'a> AsEwkbLineString<'a> for TwkbLineString {
+    type PointType = TwkbPoint;
+    type Iter = Iter<'a, TwkbPoint>;
+    fn as_ewkb(&'a self) -> EwkbLineStringGeom<'a, Self::PointType, Self::Iter> {
+        EwkbLineStringGeom { geom: self, srid: None }
+    }
+}
+
 
 impl<'a> Points<'a> for TwkbLineString {
     type ItemType = TwkbPoint;
@@ -256,4 +270,15 @@ fn test_twkb_to_geom() {
     let twkb = hex_to_vec("0210"); // SELECT encode(ST_AsTWKB('LINESTRING EMPTY'::geometry), 'hex')
     let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", line), "TwkbLineString { points: [] }");
+}
+
+#[test]
+fn test_to_ewkb() {
+    let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
+    let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", point.as_ewkb()), "EwkbPointGeom");
+
+    let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
+    let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", line.as_ewkb()), "EwkbLineStringGeom");
 }

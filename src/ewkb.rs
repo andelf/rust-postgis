@@ -1,10 +1,13 @@
-use types::{Point};
+use types::{Point, LineString, Points, EwkbPointGeom, AsEwkbPoint, EwkbLineStringGeom, AsEwkbLineString};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
+use std::slice::Iter;
 use byteorder::{self,ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use error::Error;
 
+
+// --- Structs for reading PostGIS geometries into
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct EwkbPoint {
@@ -19,7 +22,9 @@ pub struct EwkbLineString {
     pub srid: Option<i32>,
 }
 
-pub trait EwkbGeometryType: fmt::Debug + Sized {
+// --- Traits
+
+pub trait EwkbGeometry: fmt::Debug {
     type PointType: Point;
 
     fn opt_srid(&self) -> Option<i32> {
@@ -27,9 +32,9 @@ pub trait EwkbGeometryType: fmt::Debug + Sized {
     }
     fn set_srid(&mut self, _srid: Option<i32>) {
     }
+}
 
-    fn type_id(&self) -> u32;
-
+pub trait EwkbRead: EwkbGeometry + Sized {
     fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         let byte_order = try!(raw.read_i8());
         let is_be = byte_order == 0i8;
@@ -44,6 +49,10 @@ pub trait EwkbGeometryType: fmt::Debug + Sized {
     }
 
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error>;
+}
+
+pub trait EwkbWrite: EwkbGeometry {
+    fn type_id(&self) -> u32;
 
     fn write_ewkb<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         // use LE
@@ -64,6 +73,79 @@ pub trait EwkbGeometryType: fmt::Debug + Sized {
     }
 }
 
+// --- Point
+
+impl<'a> EwkbGeometry for EwkbPointGeom<'a> {
+    type PointType = EwkbPoint;
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
+    }
+    fn set_srid(&mut self, srid: Option<i32>) {
+        self.srid = srid;
+    }
+}
+
+impl<'a> fmt::Debug for EwkbPointGeom<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "EwkbPointGeom")); //TODO
+        Ok(())
+    }
+}
+
+impl<'a> EwkbPointGeom<'a> {
+    fn has_z() -> bool { false }
+    fn has_m() -> bool { false }
+    fn wkb_type_id(has_srid: bool) -> u32 {
+        let mut type_ = 0x0000_0001_u32;
+        if has_srid {
+            type_ |= 0x20000000;
+        }
+        if Self::has_z() {
+            type_ |= 0x80000000;
+        }
+        if Self::has_m() {
+            type_ != 0x40000000;
+        }
+        type_
+    }
+}
+
+impl<'a> EwkbWrite for EwkbPointGeom<'a> {
+    fn type_id(&self) -> u32 {
+        Self::wkb_type_id(self.opt_srid().is_some())
+    }
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        try!(w.write_f64::<LittleEndian>(self.geom.x()));
+        try!(w.write_f64::<LittleEndian>(self.geom.y()));
+        self.geom.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
+        self.geom.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
+        Ok(())
+    }
+}
+
+impl<'a> AsEwkbPoint<'a> for EwkbPoint {
+    fn as_ewkb(&'a self) -> EwkbPointGeom<'a> {
+        EwkbPointGeom { geom: self, srid: self.srid }
+    }
+}
+
+/*
+impl EwkbWrite for EwkbPoint {
+    fn type_id(&self) -> u32 {
+        EwkbPointGeom::wkb_type_id(self.opt_srid().is_some())
+    }
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        //lol
+        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
+        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
+        try!(w.write_f64::<LittleEndian>(x));
+        try!(w.write_f64::<LittleEndian>(y));
+        self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
+        self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
+        Ok(())
+     }
+}
+*/
 
 impl From<byteorder::Error> for Error {
     fn from(e: byteorder::Error) -> Error {
@@ -96,19 +178,6 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
 impl EwkbPoint {
     fn has_z() -> bool { false }
     fn has_m() -> bool { false }
-    fn wkb_type_id(has_srid: bool) -> u32 {
-        let mut type_ = 0x0000_0001_u32;
-        if has_srid {
-            type_ |= 0x20000000;
-        }
-        if Self::has_z() {
-            type_ |= 0x80000000;
-        }
-        if Self::has_m() {
-            type_ != 0x40000000;
-        }
-        type_
-    }
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
         EwkbPoint { x: x, y: y, srid: None }
     }
@@ -123,18 +192,17 @@ impl Point for EwkbPoint {
     }
 }
 
-impl EwkbGeometryType for EwkbPoint {
+impl EwkbGeometry for EwkbPoint {
     type PointType = EwkbPoint;
-
     fn opt_srid(&self) -> Option<i32> {
         self.srid
     }
     fn set_srid(&mut self, srid: Option<i32>) {
         self.srid = srid;
     }
-    fn type_id(&self) -> u32 {
-        Self::wkb_type_id(self.opt_srid().is_some())
-    }
+}
+
+impl EwkbRead for EwkbPoint {
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
         let x = try!(read_f64(raw, is_be));
         let y = try!(read_f64(raw, is_be));
@@ -150,35 +218,21 @@ impl EwkbGeometryType for EwkbPoint {
         };
         Ok(Self::new_from_opt_vals(x, y, z, m))
     }
-
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        // lol
-        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
-        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
-        try!(w.write_f64::<LittleEndian>(x));
-        try!(w.write_f64::<LittleEndian>(y));
-        self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
-        self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
-        Ok(())
-    }
 }
 
+// --- LineString
 
-impl EwkbGeometryType for EwkbLineString {
+impl EwkbGeometry for EwkbLineString {
     type PointType = EwkbPoint;
-
     fn opt_srid(&self) -> Option<i32> {
         self.srid
     }
     fn set_srid(&mut self, srid: Option<i32>) {
         self.srid = srid;
     }
+}
 
-    fn type_id(&self) -> u32 {
-        let type_id = EwkbPoint::wkb_type_id(self.opt_srid().is_some());
-        (type_id & 0xffff_ff00) | 0x02
-    }
-
+impl EwkbRead for EwkbLineString {
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
         let mut points: Vec<EwkbPoint> = vec![];
         let size = try!(read_u32(raw, is_be)) as usize;
@@ -187,36 +241,121 @@ impl EwkbGeometryType for EwkbLineString {
         }
         Ok(EwkbLineString {points: points, srid: None})
     }
+}
+
+impl<'a> Points<'a> for EwkbLineString {
+    type ItemType = EwkbPoint;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn points(&'a self) -> Self::Iter {
+        self.points.iter()
+    }
+}
+
+impl<'a> LineString<'a> for EwkbLineString {}
+
+impl<'a, T, I> EwkbGeometry for EwkbLineStringGeom<'a, T, I>
+    where T: 'a + Point,
+          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
+    type PointType = EwkbPoint;
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
+    }
+    fn set_srid(&mut self, srid: Option<i32>) {
+        self.srid = srid;
+    }
+}
+
+impl<'a, T, I> fmt::Debug for EwkbLineStringGeom<'a, T, I>
+    where T: 'a + Point,
+          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "EwkbLineStringGeom")); //TODO
+        Ok(())
+    }
+}
+
+impl<'a, T, I> EwkbWrite for EwkbLineStringGeom<'a, T, I>
+    where T: 'a + Point,
+          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
+    fn type_id(&self) -> u32 {
+        let type_id = EwkbPointGeom::wkb_type_id(self.opt_srid().is_some());
+        (type_id & 0xffff_ff00) | 0x02
+    }
 
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
-        for point in self.points.iter() {
-            let wkb = EwkbPoint { x: point.x, y: point.y, srid: None };
+        try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
+        for point in self.geom.points() {
+            let wkb = EwkbPointGeom { geom: point, srid: self.srid };
             try!(wkb.write_ewkb_body(w));
         }
         Ok(())
     }
 }
 
+impl<'a> AsEwkbLineString<'a> for EwkbLineString {
+    type PointType = EwkbPoint;
+    type Iter = Iter<'a, EwkbPoint>;
+    fn as_ewkb(&'a self) -> EwkbLineStringGeom<'a, Self::PointType, Self::Iter> {
+        EwkbLineStringGeom { geom: self, srid: self.srid }
+    }
+}
+
+/*
+impl EwkbWrite for EwkbLineString {
+    fn type_id(&self) -> u32 {
+        let type_id = EwkbPointGeom::wkb_type_id(self.opt_srid().is_some());
+        (type_id & 0xffff_ff00) | 0x02
+    }
+
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
+        for point in self.points.iter() {
+            try!(point.as_ewkb().write_ewkb_body(w));
+        }
+        Ok(())
+    }
+}
+*/
+
 
 #[test]
 fn test_geom_to_wkb() {
     // 'POINT (10 -20)'
     let point = EwkbPoint { x: 10.0, y: -20.0, srid: None };
-    assert_eq!(point.to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
 
     // 'SRID=4326;POINT (10 -20)'
     let point = EwkbPoint { x: 10.0, y: -20.0, srid: Some(4326) };
-    assert_eq!(point.to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
 
     let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
     // 'LINESTRING (10 -20, -0 -0.5)'
     let line = EwkbLineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
-    assert_eq!(line.to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+    assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
     // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
     let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
-    assert_eq!(line.to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+    assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+}
+
+#[test]
+fn test_iterators() {
+    let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
+    let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    assert_eq!(line.points().last(), Some(&EwkbPoint { x: 0., y: -0.5, srid: None }));
+}
+
+#[test]
+fn test_ewkb_adapters() {
+    let point = EwkbPoint { x: 10.0, y: -20.0, srid: None };
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
+
+    let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
+    let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
 
 #[test]
@@ -224,10 +363,10 @@ fn test_wkb_to_geom() {
     // 'POINT (10 -20)'
     let mut point_ewkb: &[u8] = &[1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 192];
     let point = EwkbPoint::read_ewkb(&mut point_ewkb).unwrap();
-    assert_eq!(point.to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
 
     // 'LINESTRING (10 -20, -0 -0.5)'
     let mut line_ewkb: &[u8] = &[1, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 224, 191];
     let line = EwkbLineString::read_ewkb(&mut line_ewkb).unwrap();
-    assert_eq!(line.to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+    assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
