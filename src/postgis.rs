@@ -1,4 +1,5 @@
-use ewkb::{EwkbPoint, EwkbLineString, EwkbGeometryType};
+use types::{Point, AsEwkbPoint, AsEwkbLineString, EwkbPointGeom, EwkbLineStringGeom};
+use ewkb::{EwkbPoint, EwkbLineString, EwkbRead, EwkbWrite};
 use twkb::{TwkbGeom, TwkbPoint, TwkbLineString};
 use std;
 use std::io::prelude::*;
@@ -35,11 +36,20 @@ impl FromSql for EwkbPoint {
     }
 }
 
-impl ToSql for EwkbPoint {
+impl<'a> ToSql for EwkbPointGeom<'a> {
     to_sql_checked!();
     accepts_geography!();
     fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
         try!(self.write_ewkb(out));
+        Ok(IsNull::No)
+    }
+}
+
+impl ToSql for EwkbPoint {
+    to_sql_checked!();
+    accepts_geography!();
+    fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+        try!(self.as_ewkb().write_ewkb(out));
         Ok(IsNull::No)
     }
 }
@@ -51,11 +61,23 @@ impl FromSql for EwkbLineString {
     }
 }
 
-impl ToSql for EwkbLineString {
+impl<'a, T, I> ToSql for EwkbLineStringGeom<'a, T, I>
+    where T: 'a + Point,
+          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
     to_sql_checked!();
     accepts_geography!();
     fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
         try!(self.write_ewkb(out));
+        Ok(IsNull::No)
+    }
+}
+
+impl ToSql for EwkbLineString {
+    to_sql_checked!();
+    accepts_geography!();
+    fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+        try!(self.as_ewkb().write_ewkb(out));
         Ok(IsNull::No)
     }
 }
@@ -95,7 +117,7 @@ mod tests {
     use postgres::Connection;
     use std::env;
     use std::error::Error;
-    use types::{Point};
+    use types::{Point, AsEwkbPoint, AsEwkbLineString};
     use types;
     use ewkb::{EwkbPoint, EwkbLineString};
     use twkb::{TwkbPoint, TwkbLineString};
@@ -236,6 +258,32 @@ mod tests {
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
         let line = result.iter().map(|r| r.get::<_, TwkbLineString>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", line), "TwkbLineString { points: [TwkbPoint { x: 10, y: -20 }, TwkbPoint { x: 0, y: -0.5 }] }");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_twkb_insert() {
+        let conn = connect();
+        or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(Point))", &[]));
+
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT(10 -20)'::geometry)", &[]));
+        let point = result.iter().map(|r| r.get::<_, TwkbPoint>(0)).last().unwrap();
+
+        or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&point.as_ewkb()]));
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('POINT(10 -20)') FROM geomtests", &[]));
+        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        or_panic!(conn.execute("TRUNCATE geomtests", &[]));
+
+        let conn = connect();
+        or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineString))", &[]));
+
+        let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
+        let line = result.iter().map(|r| r.get::<_, TwkbLineString>(0)).last().unwrap();
+
+        or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line.as_ewkb()]));
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('LINESTRING (10 -20, -0 -0.5)') FROM geomtests", &[]));
+        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        or_panic!(conn.execute("TRUNCATE geomtests", &[]));
     }
 
     #[test]
