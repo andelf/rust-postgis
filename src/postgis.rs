@@ -291,19 +291,32 @@ mod tests {
     #[allow(unused_imports,unused_variables)]
     fn test_examples() {
         use postgres::{Connection, SslMode};
-        //use postgis::EwkbLineString;
+        //use postgis::{EwkbLineString, Points};
 
         fn main() {
             //
             use ewkb::EwkbLineString;
+            use types::Points;
+            use twkb::TwkbLineString;
             let conn = connect();
             or_panic!(conn.execute("CREATE TEMPORARY TABLE busline (route geometry(LineString))", &[]));
+            or_panic!(conn.execute("CREATE TEMPORARY TABLE stops (stop geometry(Point))", &[]));
             or_panic!(conn.execute("INSERT INTO busline (route) VALUES ('LINESTRING(10 -20, -0 -0.5)'::geometry)", &[]));
             //
 
             // conn ....
             for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
                 let route: EwkbLineString = row.get("route");
+                let last_stop = route.points().last().unwrap();
+                let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
+            }
+
+        //use postgis::twkb::TwkbLineString;
+
+            for row in &conn.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
+                let route: TwkbLineString = row.get(0);
+                let last_stop = route.points().last().unwrap();
+                let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop.as_ewkb()]);
             }
         }
 
