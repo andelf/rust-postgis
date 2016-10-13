@@ -322,7 +322,7 @@ impl EwkbWrite for EwkbLineString {
 
 
 #[test]
-fn test_geom_to_wkb() {
+fn test_ewkb_write() {
     // 'POINT (10 -20)'
     let point = EwkbPoint { x: 10.0, y: -20.0, srid: None };
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
@@ -342,31 +342,41 @@ fn test_geom_to_wkb() {
 }
 
 #[test]
-fn test_iterators() {
-    let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
-    let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
-    assert_eq!(line.points().last(), Some(&EwkbPoint { x: 0., y: -0.5, srid: None }));
-}
-
-#[test]
 fn test_ewkb_adapters() {
-    let point = EwkbPoint { x: 10.0, y: -20.0, srid: None };
-    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
+    let point = EwkbPoint { x: 10.0, y: -20.0, srid: Some(4326) };
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
 
     let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
     let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
 
+#[cfg(test)]
+fn hex_to_vec(hexstr: &str) -> Vec<u8> {
+    hexstr.as_bytes().chunks(2).map(|chars| {
+        let hb = if chars[0] <= 57 { chars[0] - 48 } else { chars[0] - 55 };
+        let lb = if chars[1] <= 57 { chars[1] - 48 } else { chars[1] - 55 };
+        hb * 16 + lb
+    }).collect::<Vec<_>>()
+}
+
 #[test]
-fn test_wkb_to_geom() {
-    // 'POINT (10 -20)'
-    let mut point_ewkb: &[u8] = &[1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 192];
-    let point = EwkbPoint::read_ewkb(&mut point_ewkb).unwrap();
+fn test_ewkb_read() {
+    // SELECT 'POINT(10 -20)'::geometry
+    let ewkb = hex_to_vec("0101000000000000000000244000000000000034C0");
+    assert_eq!(ewkb, &[1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 192]);
+    let point = EwkbPoint::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
 
-    // 'LINESTRING (10 -20, -0 -0.5)'
-    let mut line_ewkb: &[u8] = &[1, 2, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 224, 191];
-    let line = EwkbLineString::read_ewkb(&mut line_ewkb).unwrap();
+    // SELECT 'LINESTRING (10 -20, -0 -0.5)'::geometry
+    let ewkb = hex_to_vec("010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+    let line = EwkbLineString::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+}
+
+#[test]
+fn test_iterators() {
+    let p = |x, y| EwkbPoint { x: x, y: y, srid: None };
+    let line = EwkbLineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    assert_eq!(line.points().last(), Some(&EwkbPoint { x: 0., y: -0.5, srid: None }));
 }

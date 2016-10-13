@@ -225,6 +225,9 @@ impl<'a> LineString<'a> for TwkbLineString {}
 
 
 #[cfg(test)]
+use ewkb::EwkbWrite;
+
+#[cfg(test)]
 fn hex_to_vec(hexstr: &str) -> Vec<u8> {
     hexstr.as_bytes().chunks(2).map(|chars| {
         let hb = if chars[0] <= 57 { chars[0] - 48 } else { chars[0] - 87 };
@@ -234,7 +237,7 @@ fn hex_to_vec(hexstr: &str) -> Vec<u8> {
 }
 
 #[test]
-fn test_twkb_to_geom() {
+fn test_twkb_read() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point), "TwkbPoint { x: 10, y: -20 }");
@@ -277,8 +280,10 @@ fn test_to_ewkb() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = TwkbPoint::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point.as_ewkb()), "EwkbPointGeom");
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
 
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = TwkbLineString::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", line.as_ewkb()), "EwkbLineStringGeom");
+    assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
