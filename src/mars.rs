@@ -5,6 +5,7 @@
 //  Description : WGS84 GCJ02 conversion for rust
 //  Time-stamp: <2015-06-01 10:45:55 andelf>
 
+use ewkb;
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
 struct Converter {
@@ -299,6 +300,20 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
     }
 
     bisection_find_vals(x, y, x - 0.1, y - 0.1, x + 0.1, y + 0.1, epsilon)
+}
+
+
+impl ewkb::Point {
+    pub fn new_wgs84(x: f64, y: f64) -> ewkb::Point {
+        ewkb::Point {x: x, y: y, srid: Some(4326)}
+    }
+    pub fn from_gcj02(x: f64, y: f64) -> ewkb::Point {
+        let (x0, y0) = to_wgs84(x, y);
+        ewkb::Point {x: x0, y: y0, srid: Some(4326)}
+    }
+    pub fn to_gcj02(&self) -> (f64, f64) {
+        from_wgs84(self.x, self.y)
+    }
 }
 
 
