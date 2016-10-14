@@ -54,10 +54,10 @@ impl ToSql for ewkb::Point {
     }
 }
 
-impl FromSql for ewkb::LineString {
+impl FromSql for ewkb::LineString<ewkb::Point> {
     accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::LineString> {
-        ewkb::LineString::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LINESTRING", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::LineString<ewkb::Point>> {
+        ewkb::LineString::<ewkb::Point>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LINESTRING", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
@@ -73,7 +73,7 @@ impl<'a, T, I> ToSql for EwkbLineString<'a, T, I>
     }
 }
 
-impl ToSql for ewkb::LineString {
+impl ToSql for ewkb::LineString<ewkb::Point> {
     to_sql_checked!();
     accepts_geography!();
     fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
@@ -177,7 +177,7 @@ mod tests {
 
         let p = |x, y| ewkb::Point { x: x, y: y, srid: None };
         // 'LINESTRING (10 -20, -0 -0.5)'
-        let line = ewkb::LineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
+        let line = ewkb::LineString::<ewkb::Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
         let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
@@ -187,7 +187,7 @@ mod tests {
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineString, 4326))", &[]));
 
         // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
-        let line = ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+        let line = ewkb::LineString::<ewkb::Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
         let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
@@ -219,17 +219,17 @@ mod tests {
 
         let p = |x, y| ewkb::Point { x: x, y: y, srid: None };
         let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
-        let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
-        assert_eq!(line, ewkb::LineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
+        let line = result.iter().map(|r| r.get::<_, ewkb::LineString<ewkb::Point>>(0)).last().unwrap();
+        assert_eq!(line, ewkb::LineString::<ewkb::Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
         assert_eq!(line.srid, None);
 
         let result = or_panic!(conn.query("SELECT ('SRID=4326;LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
-        let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
-        assert_eq!(line, ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]});
+        let line = result.iter().map(|r| r.get::<_, ewkb::LineString<ewkb::Point>>(0)).last().unwrap();
+        assert_eq!(line, ewkb::LineString::<ewkb::Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]});
         assert_eq!(line.srid, Some(4326));
 
         let result = or_panic!(conn.query("SELECT 'LINESTRING EMPTY'::geometry", &[]));
-        let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
+        let line = result.iter().map(|r| r.get::<_, ewkb::LineString<ewkb::Point>>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", line), "LineString { points: [], srid: None }");
     }
 
@@ -307,13 +307,13 @@ mod tests {
 
             // conn ....
             for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
-                let route: ewkb::LineString = row.get("route");
+                let route: ewkb::LineString<ewkb::Point> = row.get("route");
                 let last_stop = route.points().last().unwrap();
                 let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
             }
 
             for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
-                let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
+                let route = row.get_opt::<_, Option<ewkb::LineString<ewkb::Point>>>("route");
                 match route.unwrap() {
                     Ok(Some(geom)) => { println!("{:?}", geom) }
                     Ok(None) => { /* Handle NULL value */ }
