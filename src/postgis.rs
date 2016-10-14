@@ -312,6 +312,15 @@ mod tests {
                 let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
             }
 
+            for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
+                let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
+                match route.unwrap() {
+                    Ok(Some(geom)) => { println!("{:?}", geom) }
+                    Ok(None) => { /* Handle NULL value */ }
+                    Err(err) => { println!("Error: {}", err) }
+                }
+            }
+
         //use postgis::twkb;
 
             for row in &conn.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
