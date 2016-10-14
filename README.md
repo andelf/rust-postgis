@@ -29,6 +29,16 @@ fn main() {
 }
 ```
 
+Handling NULL values:
+```rust
+let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
+match route.unwrap() {
+    Ok(Some(geom)) => { println!("{:?}", geom) }
+    Ok(None) => { /* Handle NULL value */ }
+    Err(err) => { println!("Error: {}", err) }
+}
+```
+
 ## Writing other geometry types into PostGIS
 
 rust-postgis supports writing geometry types into PostGIS which implement the following traits:
