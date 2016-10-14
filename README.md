@@ -16,12 +16,13 @@ An extension to rust-postgres, adds support for PostGIS.
 
 ```rust
 use postgres::{Connection, SslMode};
-use postgis::{EwkbLineString, Points};
+use postgis::ewkb;
+use postgis::Points;
 
 fn main() {
     // conn ....
     for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
-        let route: EwkbLineString = row.get("route");
+        let route: ewkb::LineString = row.get("route");
         let last_stop = route.points().last().unwrap();
         let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
     }
@@ -40,8 +41,11 @@ See the TWKB implementation as an example.
 An example for reading a TWKB geometry and writing it back as EWKB:
 
 ```rust
+use postgis::twkb;
+use postgis::Points;
+
 for row in &conn.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
-    let route: TwkbLineString = row.get(0);
+    let route: twkb::LineString = row.get(0);
     let last_stop = route.points().last().unwrap();
     let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop.as_ewkb()]);
 }

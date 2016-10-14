@@ -1,11 +1,12 @@
-extern crate geo;
 #[macro_use(to_sql_checked)]
 extern crate postgres;
 extern crate byteorder;
+extern crate geo;
 
-pub mod error;
-pub mod types;
+mod error;
+mod types;
+pub use types::{Point, LineString, Points, EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString};
 pub mod ewkb;
 pub mod twkb;
-pub mod postgis;
+mod postgis;
 pub mod mars;
