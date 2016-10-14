@@ -43,16 +43,16 @@ impl geo::ToGeo<f64> for Point {
 
 // --- Adapter structs and traits for EWKB output
 
-pub struct EwkbPointGeom<'a> {
+pub struct EwkbPoint<'a> {
     pub geom: &'a Point,
     pub srid: Option<i32>,
 }
 
 pub trait AsEwkbPoint<'a> {
-    fn as_ewkb(&'a self) -> EwkbPointGeom<'a>;
+    fn as_ewkb(&'a self) -> EwkbPoint<'a>;
 }
 
-pub struct EwkbLineStringGeom<'a, T, I>
+pub struct EwkbLineString<'a, T, I>
     where T: 'a + Point,
           I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
 {
@@ -63,5 +63,5 @@ pub struct EwkbLineStringGeom<'a, T, I>
 pub trait AsEwkbLineString<'a> {
     type PointType: 'a + Point;
     type Iter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
-    fn as_ewkb(&'a self) -> EwkbLineStringGeom<'a, Self::PointType, Self::Iter>;
+    fn as_ewkb(&'a self) -> EwkbLineString<'a, Self::PointType, Self::Iter>;
 }
