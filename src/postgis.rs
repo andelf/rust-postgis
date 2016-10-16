@@ -45,7 +45,7 @@ impl<'a> ToSql for EwkbPoint<'a> {
     }
 }
 
-impl ToSql for ewkb::Point {
+impl ToSql for ewkb::Point { //TODO: PointZ, etc.
     to_sql_checked!();
     accepts_geography!();
     fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
@@ -54,10 +54,12 @@ impl ToSql for ewkb::Point {
     }
 }
 
-impl FromSql for ewkb::LineString<ewkb::Point> {
+impl<'a, T> FromSql for ewkb::LineString<T>
+    where T: 'a + Point + EwkbRead
+{
     accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::LineString<ewkb::Point>> {
-        ewkb::LineString::<ewkb::Point>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LINESTRING", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::LineString<T>> {
+        ewkb::LineString::<T>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LINESTRING", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
@@ -73,7 +75,9 @@ impl<'a, T, I> ToSql for EwkbLineString<'a, T, I>
     }
 }
 
-impl ToSql for ewkb::LineString<ewkb::Point> {
+impl<'a, T> ToSql for ewkb::LineString<T>
+    where T: 'a + Point + EwkbRead
+{
     to_sql_checked!();
     accepts_geography!();
     fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
@@ -190,6 +194,17 @@ mod tests {
         let line = ewkb::LineString::<ewkb::Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
         let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
+        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        or_panic!(conn.execute("TRUNCATE geomtests", &[]));
+
+        let conn = connect();
+        or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineStringZ, 4326))", &[]));
+
+        let p = |x, y, z| ewkb::PointZ { x: x, y: y, z: z, srid: Some(4326) };
+        // 'SRID=4326;LINESTRING (10 -20 100, -0 -0.5 101)'
+        let line = ewkb::LineString::<ewkb::PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
+        or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING (10 -20 100, -0 -0.5 101)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
     }
