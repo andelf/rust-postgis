@@ -68,11 +68,10 @@ pub trait EwkbRead: fmt::Debug + Sized {
         if type_id & 0x20000000 == 0x20000000 {
            srid = Some(try!(read_i32(raw, is_be)));
         }
-        let ewkb = Self::read_ewkb_body(raw, is_be);
-        ewkb.map(|mut val| { val.set_srid(srid); val } )
+        Self::read_ewkb_body(raw, is_be, srid)
     }
 
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error>;
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error>;
 }
 
 pub trait EwkbWrite: fmt::Debug + Sized {
@@ -188,8 +187,8 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
 impl Point {
     fn has_z() -> bool { false }
     fn has_m() -> bool { false }
-    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
-        Point { x: x, y: y, srid: None }
+    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>, srid: Option<i32>) -> Self {
+        Point { x: x, y: y, srid: srid }
     }
 }
 
@@ -205,8 +204,8 @@ impl postgis::Point for Point {
 impl PointZ {
     fn has_z() -> bool { true }
     fn has_m() -> bool { false }
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, _m: Option<f64>) -> Self {
-        PointZ { x: x, y: y, z: z.unwrap(), srid: None }
+    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, _m: Option<f64>, srid: Option<i32>) -> Self {
+        PointZ { x: x, y: y, z: z.unwrap(), srid: srid }
     }
 }
 
@@ -225,8 +224,8 @@ impl postgis::Point for PointZ {
 impl PointM {
     fn has_z() -> bool { false }
     fn has_m() -> bool { true }
-    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, m: Option<f64>) -> Self {
-        PointM { x: x, y: y, m: m.unwrap(), srid: None }
+    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, m: Option<f64>, srid: Option<i32>) -> Self {
+        PointM { x: x, y: y, m: m.unwrap(), srid: srid }
     }
 }
 
@@ -245,8 +244,8 @@ impl postgis::Point for PointM {
 impl PointZM {
     fn has_z() -> bool { true }
     fn has_m() -> bool { true }
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>) -> Self {
-        PointZM { x: x, y: y, z: z.unwrap(), m: m.unwrap(), srid: None }
+    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>, srid: Option<i32>) -> Self {
+        PointZM { x: x, y: y, z: z.unwrap(), m: m.unwrap(), srid: srid }
     }
 }
 
@@ -275,7 +274,7 @@ macro_rules! impl_point_read_traits {
             fn set_srid(&mut self, srid: Option<i32>) {
                 self.srid = srid;
             }
-            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let x = try!(read_f64(raw, is_be));
                 let y = try!(read_f64(raw, is_be));
                 let z = if Self::has_z() {
@@ -288,7 +287,7 @@ macro_rules! impl_point_read_traits {
                 } else {
                     None
                 };
-                Ok(Self::new_from_opt_vals(x, y, z, m))
+                Ok(Self::new_from_opt_vals(x, y, z, m, srid))
             }
         }
 
@@ -315,13 +314,13 @@ impl<P: postgis::Point + EwkbRead> EwkbRead for LineString<P> {
     fn set_srid(&mut self, srid: Option<i32>) {
         self.srid = srid;
     }
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
         let mut points: Vec<P> = vec![];
         let size = try!(read_u32(raw, is_be)) as usize;
         for _ in 0..size {
-            points.push(P::read_ewkb_body(raw, is_be).unwrap()); // TODO: set srid of point from LineString srid
+            points.push(P::read_ewkb_body(raw, is_be, srid).unwrap());
         }
-        Ok(LineString::<P> {points: points, srid: None})
+        Ok(LineString::<P> {points: points, srid: srid})
     }
 }
 
@@ -476,7 +475,7 @@ fn test_ewkb_read() {
     let line = LineString::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(line, LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
 
-    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: None }; //TODO - set point SRID: srid: Some(4326) };
+    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: Some(4326) };
     // SELECT 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'::geometry
     let ewkb = hex_to_vec("01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
     let line = LineString::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
