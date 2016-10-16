@@ -7,6 +7,9 @@ use std::slice::Iter;
 use byteorder::{self,ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use error::Error;
 
+// OGC WKB specification: http://www.opengeospatial.org/standards/sfa
+// PostGIS EWKB extensions: https://svn.osgeo.org/postgis/trunk/doc/ZMSgeoms.txt
+
 
 // --- Structs for reading PostGIS geometries into
 
@@ -50,17 +53,12 @@ pub struct LineString<P: postgis::Point + EwkbRead> {
 
 // --- Traits
 
-pub trait EwkbGeometry: fmt::Debug {
-    type PointType: postgis::Point;
+pub trait EwkbRead: fmt::Debug + Sized {
+    fn point_type() -> postgis::PointType;
 
-    fn opt_srid(&self) -> Option<i32> {
-        None
-    }
     fn set_srid(&mut self, _srid: Option<i32>) {
     }
-}
 
-pub trait EwkbRead: EwkbGeometry + Sized {
     fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         let byte_order = try!(raw.read_i8());
         let is_be = byte_order == 0i8;
@@ -77,7 +75,27 @@ pub trait EwkbRead: EwkbGeometry + Sized {
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error>;
 }
 
-pub trait EwkbWrite: EwkbGeometry {
+pub trait EwkbWrite: fmt::Debug + Sized {
+    fn opt_srid(&self) -> Option<i32> {
+        None
+    }
+
+    fn wkb_type_id(point_type: &postgis::PointType, srid: Option<i32>) -> u32 {
+        let mut type_ = 0;
+        if srid.is_some() {
+            type_ |= 0x20000000;
+        }
+        if *point_type == postgis::PointType::PointZ ||
+           *point_type == postgis::PointType::PointZM {
+            type_ |= 0x80000000;
+        }
+        if *point_type == postgis::PointType::PointM ||
+           *point_type == postgis::PointType::PointZM {
+            type_ |= 0x40000000;
+        }
+        type_
+    }
+
     fn type_id(&self) -> u32;
 
     fn write_ewkb<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
@@ -101,16 +119,6 @@ pub trait EwkbWrite: EwkbGeometry {
 
 // --- Point
 
-impl<'a> EwkbGeometry for EwkbPoint<'a> {
-    type PointType = Point; //FIXME
-    fn opt_srid(&self) -> Option<i32> {
-        self.srid
-    }
-    fn set_srid(&mut self, srid: Option<i32>) {
-        self.srid = srid;
-    }
-}
-
 impl<'a> fmt::Debug for EwkbPoint<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "EwkbPoint")); //TODO
@@ -118,38 +126,12 @@ impl<'a> fmt::Debug for EwkbPoint<'a> {
     }
 }
 
-impl<'a> EwkbPoint<'a> {
-    fn has_z() -> bool { <Self as EwkbGeometry>::PointType::has_z() }
-    fn has_m() -> bool { <Self as EwkbGeometry>::PointType::has_m() }
-    fn wkb_type_id(has_srid: bool) -> u32 {
-        let mut type_ = 0x0000_0001_u32;
-        if has_srid {
-            type_ |= 0x20000000;
-        }
-        if Self::has_z() {
-            type_ |= 0x80000000;
-        }
-        if Self::has_m() {
-            type_ |= 0x40000000;
-        }
-        type_
-    }
-}
-
 impl<'a> EwkbWrite for EwkbPoint<'a> {
     fn type_id(&self) -> u32 {
-        //Self::wkb_type_id(self.opt_srid().is_some())
-        let mut type_ = 0x0000_0001_u32;
-        if self.opt_srid().is_some() {
-            type_ |= 0x20000000;
-        }
-        if self.geom.opt_z().is_some() {
-            type_ |= 0x80000000;
-        }
-        if self.geom.opt_m().is_some() {
-            type_ |= 0x40000000;
-        }
-        type_
+        0x01 | Self::wkb_type_id(&self.point_type, self.srid)
+    }
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
     }
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         try!(w.write_f64::<LittleEndian>(self.geom.x()));
@@ -162,9 +144,6 @@ impl<'a> EwkbWrite for EwkbPoint<'a> {
 
 /*
 impl EwkbWrite for Point {
-    fn type_id(&self) -> u32 {
-        EwkbPoint::wkb_type_id(self.opt_srid().is_some())
-    }
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         //lol
         let x = unsafe { *mem::transmute::<_, *const f64>(self) };
@@ -289,17 +268,13 @@ impl postgis::Point for PointZM {
 
 macro_rules! impl_point_read_traits {
     ($ptype:ident) => (
-        impl EwkbGeometry for $ptype {
-            type PointType = $ptype;
-            fn opt_srid(&self) -> Option<i32> {
-                self.srid
+        impl EwkbRead for $ptype {
+            fn point_type() -> postgis::PointType {
+                postgis::PointType::$ptype
             }
             fn set_srid(&mut self, srid: Option<i32>) {
                 self.srid = srid;
             }
-        }
-
-        impl EwkbRead for $ptype {
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
                 let x = try!(read_f64(raw, is_be));
                 let y = try!(read_f64(raw, is_be));
@@ -319,7 +294,7 @@ macro_rules! impl_point_read_traits {
 
         impl<'a> AsEwkbPoint<'a> for $ptype {
             fn as_ewkb(&'a self) -> EwkbPoint<'a> {
-                EwkbPoint { geom: self, srid: self.srid }
+                EwkbPoint { geom: self, srid: self.srid, point_type: postgis::PointType::$ptype }
             }
         }
     )
@@ -333,28 +308,26 @@ impl_point_read_traits!(PointZM);
 
 // --- LineString
 
-impl<P: postgis::Point + EwkbRead> EwkbGeometry for LineString<P> {
-    type PointType = P;
-    fn opt_srid(&self) -> Option<i32> {
-        self.srid
+impl<P: postgis::Point + EwkbRead> EwkbRead for LineString<P> {
+    fn point_type() -> postgis::PointType {
+        P::point_type()
     }
     fn set_srid(&mut self, srid: Option<i32>) {
         self.srid = srid;
     }
-}
-
-impl<P: postgis::Point + EwkbRead> EwkbRead for LineString<P> {
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool) -> Result<Self, Error> {
         let mut points: Vec<P> = vec![];
         let size = try!(read_u32(raw, is_be)) as usize;
         for _ in 0..size {
-            points.push(P::read_ewkb_body(raw, is_be).unwrap());
+            points.push(P::read_ewkb_body(raw, is_be).unwrap()); // TODO: set srid of point from LineString srid
         }
         Ok(LineString::<P> {points: points, srid: None})
     }
 }
 
-impl<'a, P: 'a + postgis::Point + EwkbRead> Points<'a> for LineString<P> {
+impl<'a, P> Points<'a> for LineString<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
     type ItemType = P;
     type Iter = Iter<'a, Self::ItemType>;
     fn points(&'a self) -> Self::Iter {
@@ -362,19 +335,9 @@ impl<'a, P: 'a + postgis::Point + EwkbRead> Points<'a> for LineString<P> {
     }
 }
 
-impl<'a, P: 'a + postgis::Point + EwkbRead> postgis::LineString<'a> for LineString<P> {}
-
-impl<'a, T, I> EwkbGeometry for EwkbLineString<'a, T, I>
-    where T: 'a + postgis::Point,
-          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+impl<'a, P> postgis::LineString<'a> for LineString<P>
+    where P: 'a + postgis::Point + EwkbRead
 {
-    type PointType = Point;
-    fn opt_srid(&self) -> Option<i32> {
-        self.srid
-    }
-    fn set_srid(&mut self, srid: Option<i32>) {
-        self.srid = srid;
-    }
 }
 
 impl<'a, T, I> fmt::Debug for EwkbLineString<'a, T, I>
@@ -391,45 +354,33 @@ impl<'a, T, I> EwkbWrite for EwkbLineString<'a, T, I>
     where T: 'a + postgis::Point,
           I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
 {
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
+    }
+
     fn type_id(&self) -> u32 {
-        let type_id = EwkbPoint::wkb_type_id(self.opt_srid().is_some());
-        (type_id & 0xffff_ff00) | 0x02
+        0x02 | Self::wkb_type_id(&self.point_type, self.srid)
     }
 
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
         for point in self.geom.points() {
-            let wkb = EwkbPoint { geom: point, srid: self.srid };
+            let wkb = EwkbPoint { geom: point, srid: self.srid, point_type: self.point_type.clone() };
             try!(wkb.write_ewkb_body(w));
         }
         Ok(())
     }
 }
 
-impl<'a, P: 'a + postgis::Point + EwkbRead> AsEwkbLineString<'a> for LineString<P> {
+impl<'a, P> AsEwkbLineString<'a> for LineString<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
     type PointType = P;
     type Iter = Iter<'a, P>;
     fn as_ewkb(&'a self) -> EwkbLineString<'a, Self::PointType, Self::Iter> {
-        EwkbLineString { geom: self, srid: self.srid }
+        EwkbLineString { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
     }
 }
-
-/*
-impl EwkbWrite for LineString<P> {
-    fn type_id(&self) -> u32 {
-        let type_id = EwkbPoint::wkb_type_id(self.opt_srid().is_some());
-        (type_id & 0xffff_ff00) | 0x02
-    }
-
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        try!(w.write_u32::<LittleEndian>(self.points.len() as u32));
-        for point in self.points.iter() {
-            try!(point.as_ewkb().write_ewkb_body(w));
-        }
-        Ok(())
-    }
-}
-*/
 
 
 #[test]
@@ -450,6 +401,11 @@ fn test_ewkb_write() {
     let point = PointZM { x: 10.0, y: -20.0, z: 100.0, m: 1.0, srid: None };
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "01010000C0000000000000244000000000000034C00000000000005940000000000000F03F");
 
+    // 'POINT (-0 -1)'
+    let point = Point { x: 0.0, y: -1.0, srid: None };
+    assert_eq!(point.as_ewkb().to_hex_ewkb(), "01010000000000000000000000000000000000F0BF");
+    // TODO: -0 in PostGIS gives 01010000000000000000000080000000000000F0BF
+
     // 'SRID=4326;POINT (10 -20)'
     let point = Point { x: 10.0, y: -20.0, srid: Some(4326) };
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
@@ -463,10 +419,10 @@ fn test_ewkb_write() {
     let line = LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
-    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: None };
-    // 'LINESTRING (10 -20 100, -0 -0.5 101)'
-    let line = LineString::<PointZ> {srid: None, points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
-    //FIXME: assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200008002000000000000000000244000000000000034C000000000000059400000000000000080000000000000E0BF0000000000405940");
+    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: Some(4326) };
+    // 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'
+    let line = LineString::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
+    assert_eq!(line.as_ewkb().to_hex_ewkb(), "01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
 }
 
 #[test]
@@ -474,7 +430,7 @@ fn test_ewkb_adapters() {
     let point = Point { x: 10.0, y: -20.0, srid: Some(4326) };
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
 
-    let p = |x, y| Point { x: x, y: y, srid: None };
+    let p = |x, y| Point { x: x, y: y, srid: Some(4326) };
     let line = LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
@@ -520,11 +476,11 @@ fn test_ewkb_read() {
     let line = LineString::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(line, LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
 
-    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: None };
-    // SELECT 'LINESTRING (10 -20 100, -0 -0.5 101)'::geometry
-    let ewkb = hex_to_vec("010200008002000000000000000000244000000000000034C000000000000059400000000000000080000000000000E0BF0000000000405940");
+    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: None }; //TODO - set point SRID: srid: Some(4326) };
+    // SELECT 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'::geometry
+    let ewkb = hex_to_vec("01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
     let line = LineString::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(line, LineString::<PointZ> {srid: None, points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
+    assert_eq!(line, LineString::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
 }
 
 #[test]

@@ -34,8 +34,6 @@ pub struct TwkbInfo {
 }
 
 pub trait TwkbGeom: fmt::Debug + Sized {
-    type PointType: postgis::Point;
-
     fn read_twkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         // https://github.com/TWKB/Specification/blob/master/twkb.md
         let mut twkb_info: TwkbInfo = Default::default();
@@ -141,8 +139,6 @@ impl postgis::Point for Point {
 }
 
 impl TwkbGeom for Point {
-    type PointType = Point;
-
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
         if twkb_info.is_empty_geom {
             return Ok(Point::new_from_opt_vals(f64::NAN, f64::NAN, None, None));
@@ -165,14 +161,12 @@ impl TwkbGeom for Point {
 
 impl<'a> AsEwkbPoint<'a> for Point {
     fn as_ewkb(&'a self) -> EwkbPoint<'a> {
-        EwkbPoint { geom: self, srid: None }
+        EwkbPoint { geom: self, srid: None, point_type: postgis::PointType::Point }
     }
 }
 
 
 impl TwkbGeom for LineString {
-    type PointType = Point;
-
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
         // npoints           uvarint
         // pointarray        varint[]
@@ -209,7 +203,7 @@ impl<'a> AsEwkbLineString<'a> for LineString {
     type PointType = Point;
     type Iter = Iter<'a, Point>;
     fn as_ewkb(&'a self) -> EwkbLineString<'a, Self::PointType, Self::Iter> {
-        EwkbLineString { geom: self, srid: None }
+        EwkbLineString { geom: self, srid: None, point_type: postgis::PointType::Point }
     }
 }
 

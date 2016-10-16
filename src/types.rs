@@ -9,8 +9,6 @@ pub trait Point {
     fn opt_m(&self) -> Option<f64> {
         None
     }
-    //fn has_z() -> bool { false }
-    //fn has_m() -> bool { false }
 }
 
 /// Iterator for points of line or multi-point geometry
@@ -43,9 +41,18 @@ impl geo::ToGeo<f64> for Point {
 
 // --- Adapter structs and traits for EWKB output
 
+#[derive(PartialEq, Clone, Debug)]
+pub enum PointType {
+    Point,
+    PointZ,
+    PointM,
+    PointZM
+}
+
 pub struct EwkbPoint<'a> {
     pub geom: &'a Point,
     pub srid: Option<i32>,
+    pub point_type: PointType,
 }
 
 pub trait AsEwkbPoint<'a> {
@@ -58,6 +65,7 @@ pub struct EwkbLineString<'a, T, I>
 {
     pub geom: &'a LineString<'a, ItemType=T, Iter=I>,
     pub srid: Option<i32>,
+    pub point_type: PointType,
 }
 
 pub trait AsEwkbLineString<'a> {
