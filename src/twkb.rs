@@ -1,5 +1,5 @@
 use types as postgis;
-use types::{Points, AsEwkbPoint, AsEwkbLineString, EwkbPoint, EwkbLineString};
+use types::{AsEwkbPoint, AsEwkbLineString, EwkbPoint, EwkbLineString};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -208,15 +208,13 @@ impl<'a> AsEwkbLineString<'a> for LineString {
 }
 
 
-impl<'a> Points<'a> for LineString {
+impl<'a> postgis::LineString<'a> for LineString {
     type ItemType = Point;
     type Iter = Iter<'a, Self::ItemType>;
     fn points(&'a self) -> Self::Iter {
         self.points.iter()
     }
 }
-
-impl<'a> postgis::LineString<'a> for LineString {}
 
 
 #[cfg(test)]

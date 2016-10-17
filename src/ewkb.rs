@@ -1,5 +1,5 @@
 use types as postgis;
-use types::{Points, EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString};
+use types::{EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -50,6 +50,13 @@ pub struct LineString<P: postgis::Point + EwkbRead> {
     pub points: Vec<P>,
     pub srid: Option<i32>,
 }
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Polygon<P: postgis::Point + EwkbRead> {
+    pub rings: Vec<LineString<P>>,
+    pub srid: Option<i32>
+}
+
 
 // --- Traits
 
@@ -307,7 +314,9 @@ impl_point_read_traits!(PointZM);
 
 // --- LineString
 
-impl<P: postgis::Point + EwkbRead> EwkbRead for LineString<P> {
+impl<P> EwkbRead for LineString<P>
+    where P: postgis::Point + EwkbRead
+{
     fn point_type() -> postgis::PointType {
         P::point_type()
     }
@@ -324,7 +333,7 @@ impl<P: postgis::Point + EwkbRead> EwkbRead for LineString<P> {
     }
 }
 
-impl<'a, P> Points<'a> for LineString<P>
+impl<'a, P> postgis::LineString<'a> for LineString<P>
     where P: 'a + postgis::Point + EwkbRead
 {
     type ItemType = P;
@@ -334,10 +343,38 @@ impl<'a, P> Points<'a> for LineString<P>
     }
 }
 
-impl<'a, P> postgis::LineString<'a> for LineString<P>
+
+// --- Polygon
+
+impl<P> EwkbRead for Polygon<P>
+    where P: postgis::Point + EwkbRead
+{
+    fn point_type() -> postgis::PointType {
+        P::point_type()
+    }
+    fn set_srid(&mut self, srid: Option<i32>) {
+        self.srid = srid;
+    }
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+        let mut rings: Vec<LineString<P>> = vec![];
+        let size = try!(read_u32(raw, is_be)) as usize;
+        for _ in 0..size {
+            rings.push(LineString::read_ewkb_body(raw, is_be, srid).unwrap());
+        }
+        Ok(Polygon::<P> {rings: rings, srid: srid})
+    }
+}
+
+impl<'a, P> postgis::Polygon<'a> for Polygon<P>
     where P: 'a + postgis::Point + EwkbRead
 {
+    type ItemType = LineString<P>;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn rings(&'a self) -> Self::Iter {
+        self.rings.iter()
+    }
 }
+
 
 impl<'a, T, I> fmt::Debug for EwkbLineString<'a, T, I>
     where T: 'a + postgis::Point,
@@ -383,7 +420,7 @@ impl<'a, P> AsEwkbLineString<'a> for LineString<P>
 
 
 #[test]
-fn test_ewkb_write() {
+fn test_point_write() {
     // 'POINT (10 -20)'
     let point = Point { x: 10.0, y: -20.0, srid: None };
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
@@ -408,7 +445,10 @@ fn test_ewkb_write() {
     // 'SRID=4326;POINT (10 -20)'
     let point = Point { x: 10.0, y: -20.0, srid: Some(4326) };
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
+}
 
+#[test]
+fn test_line_write() {
     let p = |x, y| Point { x: x, y: y, srid: None };
     // 'LINESTRING (10 -20, -0 -0.5)'
     let line = LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
@@ -444,7 +484,7 @@ fn hex_to_vec(hexstr: &str) -> Vec<u8> {
 }
 
 #[test]
-fn test_ewkb_read() {
+fn test_point_read() {
     // SELECT 'POINT(10 -20)'::geometry
     let ewkb = hex_to_vec("0101000000000000000000244000000000000034C0");
     assert_eq!(ewkb, &[1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 52, 192]);
@@ -468,7 +508,10 @@ fn test_ewkb_read() {
     let ewkb = hex_to_vec("01010000C0000000000000244000000000000034C00000000000005940000000000000F03F");
     let point = PointZM::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(point, PointZM { x: 10.0, y: -20.0, z: 100.0, m: 1.0, srid: None });
+}
 
+#[test]
+fn test_line_read() {
     let p = |x, y| Point { x: x, y: y, srid: None };
     // SELECT 'LINESTRING (10 -20, -0 -0.5)'::geometry
     let ewkb = hex_to_vec("010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
@@ -483,8 +526,21 @@ fn test_ewkb_read() {
 }
 
 #[test]
-fn test_iterators() {
+fn test_polygon_read() {
     let p = |x, y| Point { x: x, y: y, srid: None };
-    let line = LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    // SELECT 'POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
+    let ewkb = hex_to_vec("010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
+    let poly = Polygon::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    let line = LineString::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
+    assert_eq!(poly, Polygon::<Point> {srid: None, rings: vec![line]});
+}
+
+#[test]
+fn test_iterators() {
+    // Iterator traits:
+    use types::LineString;
+
+    let p = |x, y| Point { x: x, y: y, srid: None };
+    let line = self::LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.points().last(), Some(&Point { x: 0., y: -0.5, srid: None }));
 }
