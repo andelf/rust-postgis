@@ -308,12 +308,12 @@ mod tests {
     fn test_examples() {
         use postgres::{Connection, SslMode};
         //use postgis::ewkb;
-        //use postgis::Points;
+        //use postgis::LineString;
 
         fn main() {
             //
             use ewkb;
-            use types::Points;
+            use types::LineString;
             use twkb;
             let conn = connect();
             or_panic!(conn.execute("CREATE TEMPORARY TABLE busline (route geometry(LineString))", &[]));

@@ -11,24 +11,22 @@ pub trait Point {
     }
 }
 
-/// Iterator for points of line or multi-point geometry
-pub trait Points<'a> {
+pub trait LineString<'a> {
     type ItemType: 'a + Point;
     type Iter: Iterator<Item=&'a Self::ItemType>;
     fn points(&'a self) -> Self::Iter;
 }
 
-pub trait LineString<'a>: Points<'a> {
-}
-
-/// Iterator for lines of multi-lines
-pub trait Lines<'a> {
+pub trait MultiLineString<'a> {
     type ItemType: 'a + LineString<'a>;
     type Iter: Iterator<Item=&'a Self::ItemType>;
     fn lines(&'a self) -> Self::Iter;
 }
 
-pub trait MultiLineString<'a>: Lines<'a> {
+pub trait Polygon<'a> {
+    type ItemType: 'a + LineString<'a>;
+    type Iter: Iterator<Item=&'a Self::ItemType>;
+    fn rings(&'a self) -> Self::Iter;
 }
 
 // --- ToGeo impl
