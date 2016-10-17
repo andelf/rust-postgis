@@ -5,7 +5,7 @@ extern crate geo;
 
 mod error;
 mod types;
-pub use types::{Point, LineString, Polygon, EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString};
+pub use types::{Point, LineString, MultiLineString, Polygon, EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString};
 pub mod ewkb;
 pub mod twkb;
 mod postgis;

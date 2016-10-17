@@ -52,6 +52,12 @@ pub struct LineString<P: postgis::Point + EwkbRead> {
 }
 
 #[derive(PartialEq, Clone, Debug)]
+pub struct MultiLineString<P: postgis::Point + EwkbRead> {
+    pub lines: Vec<LineString<P>>,
+    pub srid: Option<i32>,
+}
+
+#[derive(PartialEq, Clone, Debug)]
 pub struct Polygon<P: postgis::Point + EwkbRead> {
     pub rings: Vec<LineString<P>>,
     pub srid: Option<i32>
@@ -344,6 +350,39 @@ impl<'a, P> postgis::LineString<'a> for LineString<P>
 }
 
 
+// --- MultiLineString
+
+impl<P> EwkbRead for MultiLineString<P>
+    where P: postgis::Point + EwkbRead
+{
+    fn point_type() -> postgis::PointType {
+        P::point_type()
+    }
+    fn set_srid(&mut self, srid: Option<i32>) {
+        self.srid = srid;
+    }
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+        let mut lines: Vec<LineString<P>> = vec![];
+        let size = try!(read_u32(raw, is_be)) as usize;
+        for _ in 0..size {
+            // header and body!
+            lines.push(LineString::read_ewkb(raw).unwrap());
+        }
+        Ok(MultiLineString::<P> {lines: lines, srid: srid})
+    }
+}
+
+impl<'a, P> postgis::MultiLineString<'a> for MultiLineString<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type ItemType = LineString<P>;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn lines(&'a self) -> Self::Iter {
+        self.lines.iter()
+    }
+}
+
+
 // --- Polygon
 
 impl<P> EwkbRead for Polygon<P>
@@ -450,11 +489,11 @@ fn test_point_write() {
 #[test]
 fn test_line_write() {
     let p = |x, y| Point { x: x, y: y, srid: None };
-    // 'LINESTRING (10 -20, -0 -0.5)'
+    // 'LINESTRING (10 -20, 0 -0.5)'
     let line = LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
-    // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
+    // 'SRID=4326;LINESTRING (10 -20, 0 -0.5)'
     let line = LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
@@ -513,7 +552,7 @@ fn test_point_read() {
 #[test]
 fn test_line_read() {
     let p = |x, y| Point { x: x, y: y, srid: None };
-    // SELECT 'LINESTRING (10 -20, -0 -0.5)'::geometry
+    // SELECT 'LINESTRING (10 -20, 0 -0.5)'::geometry
     let ewkb = hex_to_vec("010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
     let line = LineString::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(line, LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
@@ -523,6 +562,17 @@ fn test_line_read() {
     let ewkb = hex_to_vec("01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
     let line = LineString::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(line, LineString::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
+}
+
+#[test]
+fn test_multline_read() {
+    let p = |x, y| Point { x: x, y: y, srid: None };
+    // SELECT 'MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry
+    let ewkb = hex_to_vec("010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
+    let poly = MultiLineString::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    let line1 = LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line2 = LineString::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.)]};
+    assert_eq!(poly, MultiLineString::<Point> {srid: None, lines: vec![line1, line2]});
 }
 
 #[test]
