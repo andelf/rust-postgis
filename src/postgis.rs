@@ -29,13 +29,6 @@ macro_rules! accepts_geography {
 }
 
 
-impl FromSql for ewkb::Point {
-    accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::Point> {
-        ewkb::Point::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
-    }
-}
-
 impl<'a> ToSql for EwkbPoint<'a> {
     to_sql_checked!();
     accepts_geography!();
@@ -45,14 +38,31 @@ impl<'a> ToSql for EwkbPoint<'a> {
     }
 }
 
-impl ToSql for ewkb::Point { //TODO: PointZ, etc.
-    to_sql_checked!();
-    accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
-        try!(self.as_ewkb().write_ewkb(out));
-        Ok(IsNull::No)
-    }
+macro_rules! impl_sql_for_point_type {
+    ($ptype:ident) => (
+        impl FromSql for ewkb::$ptype {
+            accepts_geography!();
+            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::$ptype> {
+                ewkb::$ptype::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
+            }
+        }
+
+        impl ToSql for ewkb::$ptype {
+            to_sql_checked!();
+            accepts_geography!();
+            fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+                try!(self.as_ewkb().write_ewkb(out));
+                Ok(IsNull::No)
+            }
+        }
+    )
 }
+
+impl_sql_for_point_type!(Point);
+impl_sql_for_point_type!(PointZ);
+impl_sql_for_point_type!(PointM);
+impl_sql_for_point_type!(PointZM);
+
 
 impl<'a, T> FromSql for ewkb::LineStringT<T>
     where T: 'a + Point + EwkbRead
@@ -121,7 +131,7 @@ mod tests {
     use postgres::Connection;
     use std::env;
     use std::error::Error;
-    use types::{Point, AsEwkbPoint, AsEwkbLineString};
+    use types::{AsEwkbPoint, AsEwkbLineString};
     use types as postgis;
     use ewkb;
     use twkb;
@@ -216,17 +226,18 @@ mod tests {
         let result = or_panic!(conn.query("SELECT ('POINT(10 -20)')::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, ewkb::Point>(0)).last().unwrap();
         assert_eq!(point, ewkb::Point { x: 10.0, y: -20.0, srid: None });
-        assert_eq!(point.srid, None);
 
         let result = or_panic!(conn.query("SELECT 'SRID=4326;POINT(10 -20)'::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, ewkb::Point>(0)).last().unwrap();
         assert_eq!(point, ewkb::Point { x: 10.0, y: -20.0, srid: Some(4326) });
-        assert_eq!(point.srid, Some(4326));
+
+        let result = or_panic!(conn.query("SELECT 'SRID=4326;POINT(10 -20 99)'::geometry", &[]));
+        let point = result.iter().map(|r| r.get::<_, ewkb::PointZ>(0)).last().unwrap();
+        assert_eq!(point, ewkb::PointZ { x: 10.0, y: -20.0, z: 99.0, srid: Some(4326) });
 
         let result = or_panic!(conn.query("SELECT 'POINT EMPTY'::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, ewkb::Point>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point), "Point { x: NaN, y: NaN, srid: None }");
-        assert!(point.x().is_nan());
 
         let result = or_panic!(conn.query("SELECT NULL::geometry(Point)", &[]));
         let point = result.iter().map(|r| r.get_opt::<_, ewkb::Point>(0)).last().unwrap();
@@ -236,13 +247,11 @@ mod tests {
         let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
         assert_eq!(line, ewkb::LineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
-        assert_eq!(line.srid, None);
 
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
         let result = or_panic!(conn.query("SELECT ('SRID=4326;LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
         assert_eq!(line, ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]});
-        assert_eq!(line.srid, Some(4326));
 
         let result = or_panic!(conn.query("SELECT 'LINESTRING EMPTY'::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
