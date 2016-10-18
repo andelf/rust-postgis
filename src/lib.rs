@@ -1,7 +1,6 @@
 #[macro_use(to_sql_checked)]
 extern crate postgres;
 extern crate byteorder;
-extern crate geo;
 
 mod error;
 mod types;
