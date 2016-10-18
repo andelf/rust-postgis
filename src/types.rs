@@ -1,5 +1,3 @@
-use geo;
-
 pub trait Point {
     fn x(&self) -> f64;
     fn y(&self) -> f64;
@@ -27,14 +25,6 @@ pub trait Polygon<'a> {
     type ItemType: 'a + LineString<'a>;
     type Iter: Iterator<Item=&'a Self::ItemType>;
     fn rings(&'a self) -> Self::Iter;
-}
-
-// --- ToGeo impl
-
-impl geo::ToGeo<f64> for Point {
-    fn to_geo(&self) -> geo::Geometry<f64> {
-        geo::Geometry::Point(geo::Point::new(self.x(), self.y()))
-    }
 }
 
 // --- Adapter structs and traits for EWKB output
