@@ -46,20 +46,20 @@ pub struct PointZM {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct LineString<P: postgis::Point + EwkbRead> {
+pub struct LineStringT<P: postgis::Point + EwkbRead> {
     pub points: Vec<P>,
     pub srid: Option<i32>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct MultiLineString<P: postgis::Point + EwkbRead> {
-    pub lines: Vec<LineString<P>>,
+pub struct MultiLineStringT<P: postgis::Point + EwkbRead> {
+    pub lines: Vec<LineStringT<P>>,
     pub srid: Option<i32>,
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct Polygon<P: postgis::Point + EwkbRead> {
-    pub rings: Vec<LineString<P>>,
+pub struct PolygonT<P: postgis::Point + EwkbRead> {
+    pub rings: Vec<LineStringT<P>>,
     pub srid: Option<i32>
 }
 
@@ -129,45 +129,7 @@ pub trait EwkbWrite: fmt::Debug + Sized {
     }
 }
 
-// --- Point
-
-impl<'a> fmt::Debug for EwkbPoint<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "EwkbPoint")); //TODO
-        Ok(())
-    }
-}
-
-impl<'a> EwkbWrite for EwkbPoint<'a> {
-    fn type_id(&self) -> u32 {
-        0x01 | Self::wkb_type_id(&self.point_type, self.srid)
-    }
-    fn opt_srid(&self) -> Option<i32> {
-        self.srid
-    }
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        try!(w.write_f64::<LittleEndian>(self.geom.x()));
-        try!(w.write_f64::<LittleEndian>(self.geom.y()));
-        self.geom.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
-        self.geom.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
-        Ok(())
-    }
-}
-
-/*
-impl EwkbWrite for Point {
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        //lol
-        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
-        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
-        try!(w.write_f64::<LittleEndian>(x));
-        try!(w.write_f64::<LittleEndian>(y));
-        self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
-        self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
-        Ok(())
-     }
-}
-*/
+// --- helpers
 
 impl From<byteorder::Error> for Error {
     fn from(e: byteorder::Error) -> Error {
@@ -196,6 +158,8 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
         ))
 }
 
+
+// --- Point
 
 impl Point {
     fn has_z() -> bool { false }
@@ -318,9 +282,47 @@ impl_point_read_traits!(PointM);
 impl_point_read_traits!(PointZM);
 
 
+impl<'a> fmt::Debug for EwkbPoint<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "EwkbPoint")); //TODO
+        Ok(())
+    }
+}
+
+impl<'a> EwkbWrite for EwkbPoint<'a> {
+    fn type_id(&self) -> u32 {
+        0x01 | Self::wkb_type_id(&self.point_type, self.srid)
+    }
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
+    }
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        try!(w.write_f64::<LittleEndian>(self.geom.x()));
+        try!(w.write_f64::<LittleEndian>(self.geom.y()));
+        self.geom.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
+        self.geom.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
+        Ok(())
+    }
+}
+
+/*
+impl EwkbWrite for Point {
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        //lol
+        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
+        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
+        try!(w.write_f64::<LittleEndian>(x));
+        try!(w.write_f64::<LittleEndian>(y));
+        self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
+        self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
+        Ok(())
+     }
+}
+*/
+
 // --- LineString
 
-impl<P> EwkbRead for LineString<P>
+impl<P> EwkbRead for LineStringT<P>
     where P: postgis::Point + EwkbRead
 {
     fn point_type() -> postgis::PointType {
@@ -335,11 +337,11 @@ impl<P> EwkbRead for LineString<P>
         for _ in 0..size {
             points.push(P::read_ewkb_body(raw, is_be, srid).unwrap());
         }
-        Ok(LineString::<P> {points: points, srid: srid})
+        Ok(LineStringT::<P> {points: points, srid: srid})
     }
 }
 
-impl<'a, P> postgis::LineString<'a> for LineString<P>
+impl<'a, P> postgis::LineString<'a> for LineStringT<P>
     where P: 'a + postgis::Point + EwkbRead
 {
     type ItemType = P;
@@ -349,70 +351,10 @@ impl<'a, P> postgis::LineString<'a> for LineString<P>
     }
 }
 
-
-// --- MultiLineString
-
-impl<P> EwkbRead for MultiLineString<P>
-    where P: postgis::Point + EwkbRead
-{
-    fn point_type() -> postgis::PointType {
-        P::point_type()
-    }
-    fn set_srid(&mut self, srid: Option<i32>) {
-        self.srid = srid;
-    }
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
-        let mut lines: Vec<LineString<P>> = vec![];
-        let size = try!(read_u32(raw, is_be)) as usize;
-        for _ in 0..size {
-            // header and body!
-            lines.push(LineString::read_ewkb(raw).unwrap());
-        }
-        Ok(MultiLineString::<P> {lines: lines, srid: srid})
-    }
-}
-
-impl<'a, P> postgis::MultiLineString<'a> for MultiLineString<P>
-    where P: 'a + postgis::Point + EwkbRead
-{
-    type ItemType = LineString<P>;
-    type Iter = Iter<'a, Self::ItemType>;
-    fn lines(&'a self) -> Self::Iter {
-        self.lines.iter()
-    }
-}
-
-
-// --- Polygon
-
-impl<P> EwkbRead for Polygon<P>
-    where P: postgis::Point + EwkbRead
-{
-    fn point_type() -> postgis::PointType {
-        P::point_type()
-    }
-    fn set_srid(&mut self, srid: Option<i32>) {
-        self.srid = srid;
-    }
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
-        let mut rings: Vec<LineString<P>> = vec![];
-        let size = try!(read_u32(raw, is_be)) as usize;
-        for _ in 0..size {
-            rings.push(LineString::read_ewkb_body(raw, is_be, srid).unwrap());
-        }
-        Ok(Polygon::<P> {rings: rings, srid: srid})
-    }
-}
-
-impl<'a, P> postgis::Polygon<'a> for Polygon<P>
-    where P: 'a + postgis::Point + EwkbRead
-{
-    type ItemType = LineString<P>;
-    type Iter = Iter<'a, Self::ItemType>;
-    fn rings(&'a self) -> Self::Iter {
-        self.rings.iter()
-    }
-}
+pub type LineString = LineStringT<Point>;
+pub type LineStringZ = LineStringT<PointZ>;
+pub type LineStringM = LineStringT<PointM>;
+pub type LineStringZM = LineStringT<PointZM>;
 
 
 impl<'a, T, I> fmt::Debug for EwkbLineString<'a, T, I>
@@ -447,7 +389,7 @@ impl<'a, T, I> EwkbWrite for EwkbLineString<'a, T, I>
     }
 }
 
-impl<'a, P> AsEwkbLineString<'a> for LineString<P>
+impl<'a, P> AsEwkbLineString<'a> for LineStringT<P>
     where P: 'a + postgis::Point + EwkbRead
 {
     type PointType = P;
@@ -456,6 +398,80 @@ impl<'a, P> AsEwkbLineString<'a> for LineString<P>
         EwkbLineString { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
     }
 }
+
+// --- MultiLineString
+
+impl<P> EwkbRead for MultiLineStringT<P>
+    where P: postgis::Point + EwkbRead
+{
+    fn point_type() -> postgis::PointType {
+        P::point_type()
+    }
+    fn set_srid(&mut self, srid: Option<i32>) {
+        self.srid = srid;
+    }
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+        let mut lines: Vec<LineStringT<P>> = vec![];
+        let size = try!(read_u32(raw, is_be)) as usize;
+        for _ in 0..size {
+            // header and body!
+            lines.push(LineStringT::read_ewkb(raw).unwrap());
+        }
+        Ok(MultiLineStringT::<P> {lines: lines, srid: srid})
+    }
+}
+
+impl<'a, P> postgis::MultiLineString<'a> for MultiLineStringT<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type ItemType = LineStringT<P>;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn lines(&'a self) -> Self::Iter {
+        self.lines.iter()
+    }
+}
+
+pub type MultiLineString = MultiLineStringT<Point>;
+pub type MultiLineStringZ = MultiLineStringT<PointZ>;
+pub type MultiLineStringM = MultiLineStringT<PointM>;
+pub type MultiLineStringZM = MultiLineStringT<PointZM>;
+
+
+// --- Polygon
+
+impl<P> EwkbRead for PolygonT<P>
+    where P: postgis::Point + EwkbRead
+{
+    fn point_type() -> postgis::PointType {
+        P::point_type()
+    }
+    fn set_srid(&mut self, srid: Option<i32>) {
+        self.srid = srid;
+    }
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+        let mut rings: Vec<LineStringT<P>> = vec![];
+        let size = try!(read_u32(raw, is_be)) as usize;
+        for _ in 0..size {
+            rings.push(LineStringT::read_ewkb_body(raw, is_be, srid).unwrap());
+        }
+        Ok(PolygonT::<P> {rings: rings, srid: srid})
+    }
+}
+
+impl<'a, P> postgis::Polygon<'a> for PolygonT<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type ItemType = LineStringT<P>;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn rings(&'a self) -> Self::Iter {
+        self.rings.iter()
+    }
+}
+
+pub type Polygon = PolygonT<Point>;
+pub type PolygonZ = PolygonT<PointZ>;
+pub type PolygonM = PolygonT<PointM>;
+pub type PolygonZM = PolygonT<PointZM>;
 
 
 #[test]
@@ -490,16 +506,16 @@ fn test_point_write() {
 fn test_line_write() {
     let p = |x, y| Point { x: x, y: y, srid: None };
     // 'LINESTRING (10 -20, 0 -0.5)'
-    let line = LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line = LineStringT::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
     // 'SRID=4326;LINESTRING (10 -20, 0 -0.5)'
-    let line = LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line = LineStringT::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 
     let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: Some(4326) };
     // 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'
-    let line = LineString::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
+    let line = LineStringT::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
 }
 
@@ -509,7 +525,7 @@ fn test_ewkb_adapters() {
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
 
     let p = |x, y| Point { x: x, y: y, srid: Some(4326) };
-    let line = LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line = LineStringT::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
 
@@ -554,14 +570,14 @@ fn test_line_read() {
     let p = |x, y| Point { x: x, y: y, srid: None };
     // SELECT 'LINESTRING (10 -20, 0 -0.5)'::geometry
     let ewkb = hex_to_vec("010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
-    let line = LineString::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(line, LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
+    let line = LineStringT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(line, LineStringT::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
 
     let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: Some(4326) };
     // SELECT 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'::geometry
     let ewkb = hex_to_vec("01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
-    let line = LineString::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(line, LineString::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
+    let line = LineStringT::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(line, LineStringT::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
 }
 
 #[test]
@@ -569,10 +585,10 @@ fn test_multline_read() {
     let p = |x, y| Point { x: x, y: y, srid: None };
     // SELECT 'MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry
     let ewkb = hex_to_vec("010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
-    let poly = MultiLineString::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    let line1 = LineString::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
-    let line2 = LineString::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.)]};
-    assert_eq!(poly, MultiLineString::<Point> {srid: None, lines: vec![line1, line2]});
+    let poly = MultiLineStringT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    let line1 = LineStringT::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line2 = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.)]};
+    assert_eq!(poly, MultiLineStringT::<Point> {srid: None, lines: vec![line1, line2]});
 }
 
 #[test]
@@ -580,9 +596,9 @@ fn test_polygon_read() {
     let p = |x, y| Point { x: x, y: y, srid: None };
     // SELECT 'POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
     let ewkb = hex_to_vec("010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
-    let poly = Polygon::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    let line = LineString::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
-    assert_eq!(poly, Polygon::<Point> {srid: None, rings: vec![line]});
+    let poly = PolygonT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    let line = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
+    assert_eq!(poly, PolygonT::<Point> {srid: None, rings: vec![line]});
 }
 
 #[test]
@@ -591,6 +607,6 @@ fn test_iterators() {
     use types::LineString;
 
     let p = |x, y| Point { x: x, y: y, srid: None };
-    let line = self::LineString::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line = self::LineStringT::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
     assert_eq!(line.points().last(), Some(&Point { x: 0., y: -0.5, srid: None }));
 }

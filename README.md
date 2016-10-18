@@ -22,7 +22,7 @@ use postgis::LineString;
 fn main() {
     // conn ....
     for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
-        let route: ewkb::LineString<ewkb::Point> = row.get("route");
+        let route: ewkb::LineString = row.get("route");
         let last_stop = route.points().last().unwrap();
         let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
     }
@@ -31,7 +31,7 @@ fn main() {
 
 Handling NULL values:
 ```rust
-let route = row.get_opt::<_, Option<ewkb::LineString<ewkb::Point>>>("route");
+let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
 match route.unwrap() {
     Ok(Some(geom)) => { println!("{:?}", geom) }
     Ok(None) => { /* Handle NULL value */ }
