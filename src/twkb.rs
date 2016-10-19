@@ -277,6 +277,6 @@ fn test_to_ewkb() {
 
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line.as_ewkb()), "EwkbLineString");
+    assert_eq!(format!("{:?}", line.as_ewkb()), "$ewkbtype");
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }

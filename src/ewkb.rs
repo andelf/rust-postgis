@@ -4,6 +4,7 @@ use std::io::prelude::*;
 use std::mem;
 use std::fmt;
 use std::slice::Iter;
+use std::iter::FromIterator;
 use byteorder::{self,ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use error::Error;
 
@@ -42,12 +43,6 @@ pub struct PointZM {
     pub y: f64,
     pub z: f64,
     pub m: f64,
-    pub srid: Option<i32>,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct LineStringT<P: postgis::Point + EwkbRead> {
-    pub points: Vec<P>,
     pub srid: Option<i32>,
 }
 
@@ -320,84 +315,122 @@ impl EwkbWrite for Point {
 }
 */
 
-// --- LineString
 
-impl<P> EwkbRead for LineStringT<P>
-    where P: postgis::Point + EwkbRead
-{
-    fn point_type() -> postgis::PointType {
-        P::point_type()
-    }
-    fn set_srid(&mut self, srid: Option<i32>) {
-        self.srid = srid;
-    }
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
-        let mut points: Vec<P> = vec![];
-        let size = try!(read_u32(raw, is_be)) as usize;
-        for _ in 0..size {
-            points.push(P::read_ewkb_body(raw, is_be, srid).unwrap());
+macro_rules! define_geometry_container_type {
+    // points container
+    ($geotypetrait:ident and $asewkbtype:ident for $geotype:ident to $ewkbtype:ident with type code $typecode:expr, contains points) => (
+
+        #[derive(PartialEq, Clone, Debug)]
+        pub struct $geotype<P: postgis::Point + EwkbRead> {
+            pub points: Vec<P>,
+            pub srid: Option<i32>,
         }
-        Ok(LineStringT::<P> {points: points, srid: srid})
-    }
+
+        impl<P: postgis::Point + EwkbRead> $geotype<P> {
+            pub fn new() -> $geotype<P> {
+                $geotype { points: Vec::new(), srid: None }
+            }
+        }
+
+        impl<P> FromIterator<P> for $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            #[inline]
+            fn from_iter<I: IntoIterator<Item=P>>(iterable: I) -> $geotype<P> {
+                let iterator = iterable.into_iter();
+                let (lower, _) = iterator.size_hint();
+                let mut ret = $geotype::new();
+                ret.points.reserve(lower);
+                for item in iterator {
+                    ret.points.push(item);
+                }
+                ret
+            }
+        }
+
+        impl<P> EwkbRead for $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            fn point_type() -> postgis::PointType {
+                P::point_type()
+            }
+            fn set_srid(&mut self, srid: Option<i32>) {
+                self.srid = srid;
+            }
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+                let mut points: Vec<P> = vec![];
+                let size = try!(read_u32(raw, is_be)) as usize;
+                for _ in 0..size {
+                    points.push(P::read_ewkb_body(raw, is_be, srid).unwrap());
+                }
+                Ok($geotype::<P> {points: points, srid: srid})
+            }
+        }
+
+        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
+            where P: 'a + postgis::Point + EwkbRead
+        {
+            type ItemType = P;
+            type Iter = Iter<'a, Self::ItemType>;
+            fn points(&'a self) -> Self::Iter {
+                self.points.iter()
+            }
+        }
+
+        impl<'a, T, I> fmt::Debug for $ewkbtype<'a, T, I>
+            where T: 'a + postgis::Point,
+                  I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+        {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                try!(write!(f, "$ewkbtype")); //TODO
+                Ok(())
+            }
+        }
+
+        impl<'a, T, I> EwkbWrite for $ewkbtype<'a, T, I>
+            where T: 'a + postgis::Point,
+                  I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+        {
+            fn opt_srid(&self) -> Option<i32> {
+                self.srid
+            }
+
+            fn type_id(&self) -> u32 {
+                $typecode | Self::wkb_type_id(&self.point_type, self.srid)
+            }
+
+            fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+                try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
+                for point in self.geom.points() {
+                    let wkb = EwkbPoint { geom: point, srid: self.srid, point_type: self.point_type.clone() };
+                    try!(wkb.write_ewkb_body(w));
+                }
+                Ok(())
+            }
+        }
+
+        impl<'a, P> $asewkbtype<'a> for $geotype<P>
+            where P: 'a + postgis::Point + EwkbRead
+        {
+            type PointType = P;
+            type Iter = Iter<'a, P>;
+            fn as_ewkb(&'a self) -> $ewkbtype<'a, Self::PointType, Self::Iter> {
+                $ewkbtype { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
+            }
+        }
+    );
 }
 
-impl<'a, P> postgis::LineString<'a> for LineStringT<P>
-    where P: 'a + postgis::Point + EwkbRead
-{
-    type ItemType = P;
-    type Iter = Iter<'a, Self::ItemType>;
-    fn points(&'a self) -> Self::Iter {
-        self.points.iter()
-    }
-}
+
+/// LineString
+define_geometry_container_type!(LineString and AsEwkbLineString for LineStringT to EwkbLineString with type code 0x02, contains points);
+
 
 pub type LineString = LineStringT<Point>;
 pub type LineStringZ = LineStringT<PointZ>;
 pub type LineStringM = LineStringT<PointM>;
 pub type LineStringZM = LineStringT<PointZM>;
 
-
-impl<'a, T, I> fmt::Debug for EwkbLineString<'a, T, I>
-    where T: 'a + postgis::Point,
-          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "EwkbLineString")); //TODO
-        Ok(())
-    }
-}
-
-impl<'a, T, I> EwkbWrite for EwkbLineString<'a, T, I>
-    where T: 'a + postgis::Point,
-          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
-{
-    fn opt_srid(&self) -> Option<i32> {
-        self.srid
-    }
-
-    fn type_id(&self) -> u32 {
-        0x02 | Self::wkb_type_id(&self.point_type, self.srid)
-    }
-
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
-        for point in self.geom.points() {
-            let wkb = EwkbPoint { geom: point, srid: self.srid, point_type: self.point_type.clone() };
-            try!(wkb.write_ewkb_body(w));
-        }
-        Ok(())
-    }
-}
-
-impl<'a, P> AsEwkbLineString<'a> for LineStringT<P>
-    where P: 'a + postgis::Point + EwkbRead
-{
-    type PointType = P;
-    type Iter = Iter<'a, P>;
-    fn as_ewkb(&'a self) -> EwkbLineString<'a, Self::PointType, Self::Iter> {
-        EwkbLineString { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
-    }
-}
 
 // --- MultiLineString
 
