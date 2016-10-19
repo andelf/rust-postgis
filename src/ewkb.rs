@@ -1,5 +1,5 @@
 use types as postgis;
-use types::{EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString};
+use types::{EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString, EwkbMultiLineString, AsEwkbMultiLineString};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -470,6 +470,56 @@ pub type MultiLineStringM = MultiLineStringT<PointM>;
 pub type MultiLineStringZM = MultiLineStringT<PointZM>;
 
 
+impl<'a, P, I, T, J> fmt::Debug for EwkbMultiLineString<'a, P, I, T, J>
+    where P: 'a + postgis::Point,
+          I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          T: 'a + postgis::LineString<'a, ItemType=P, Iter=I>,
+          J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(write!(f, "EwkbMultiLineString")); //TODO
+        Ok(())
+    }
+}
+
+impl<'a, P, I, T, J> EwkbWrite for EwkbMultiLineString<'a, P, I, T, J>
+    where P: 'a + postgis::Point,
+          I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          T: 'a + postgis::LineString<'a, ItemType=P, Iter=I>,
+          J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
+    }
+
+    fn type_id(&self) -> u32 {
+        0x05 | Self::wkb_type_id(&self.point_type, self.srid)
+    }
+
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        try!(w.write_u32::<LittleEndian>(self.geom.lines().len() as u32));
+        for geom in self.geom.lines() {
+            let wkb = EwkbLineString { geom: geom, srid: self.srid, point_type: self.point_type.clone() };
+            try!(wkb.write_ewkb(w));
+        }
+        Ok(())
+    }
+}
+
+
+impl<'a, P> AsEwkbMultiLineString<'a> for MultiLineStringT<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type PointType = P;
+    type PointIter = Iter<'a, P>;
+    type ItemType = LineStringT<P>;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn as_ewkb(&'a self) -> EwkbMultiLineString<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
+        EwkbMultiLineString { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
+    }
+}
+
+
 // --- Polygon
 
 impl<P> EwkbRead for PolygonT<P>
@@ -553,13 +603,21 @@ fn test_line_write() {
 }
 
 #[test]
+fn test_multiline_write() {
+    let p = |x, y| Point { x: x, y: y, srid: None };
+    // SELECT 'MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry
+    let line1 = LineStringT::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
+    let line2 = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.)]};
+    let multiline = MultiLineStringT::<Point> {srid: None,lines: vec![line1, line2]};
+    assert_eq!(multiline.as_ewkb().to_hex_ewkb(), "010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
+}
+
+#[test]
 fn test_ewkb_adapters() {
     let point = Point { x: 10.0, y: -20.0, srid: Some(4326) };
+    let ewkb = EwkbPoint { geom: &point, srid: Some(4326), point_type: postgis::PointType::Point };
+    assert_eq!(ewkb.to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
-
-    let p = |x, y| Point { x: x, y: y, srid: Some(4326) };
-    let line = LineStringT::<Point> {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
-    assert_eq!(line.as_ewkb().to_hex_ewkb(), "0102000020E610000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
 
 #[cfg(test)]

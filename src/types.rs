@@ -47,11 +47,11 @@ pub trait AsEwkbPoint<'a> {
     fn as_ewkb(&'a self) -> EwkbPoint<'a>;
 }
 
-pub struct EwkbLineString<'a, T, I>
-    where T: 'a + Point,
-          I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+pub struct EwkbLineString<'a, P, I>
+    where P: 'a + Point,
+          I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>
 {
-    pub geom: &'a LineString<'a, ItemType=T, Iter=I>,
+    pub geom: &'a LineString<'a, ItemType=P, Iter=I>,
     pub srid: Option<i32>,
     pub point_type: PointType,
 }
@@ -60,4 +60,23 @@ pub trait AsEwkbLineString<'a> {
     type PointType: 'a + Point;
     type Iter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
     fn as_ewkb(&'a self) -> EwkbLineString<'a, Self::PointType, Self::Iter>;
+}
+
+pub struct EwkbMultiLineString<'a, P, I, T, J>
+    where P: 'a + Point,
+          I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          T: 'a + LineString<'a, ItemType=P, Iter=I>,
+          J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+{
+    pub geom: &'a MultiLineString<'a, ItemType=T, Iter=J>,
+    pub srid: Option<i32>,
+    pub point_type: PointType,
+}
+
+pub trait AsEwkbMultiLineString<'a> {
+    type PointType: 'a + Point;
+    type PointIter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
+    type ItemType: 'a + LineString<'a, ItemType=Self::PointType, Iter=Self::PointIter>;
+    type Iter: Iterator<Item=&'a Self::ItemType>+ExactSizeIterator<Item=&'a Self::ItemType>;
+    fn as_ewkb(&'a self) -> EwkbMultiLineString<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter>;
 }
