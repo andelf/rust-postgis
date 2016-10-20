@@ -45,12 +45,6 @@ pub struct PointZM {
     pub srid: Option<i32>,
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub struct PolygonT<P: postgis::Point + EwkbRead> {
-    pub rings: Vec<LineStringT<P>>,
-    pub srid: Option<i32>
-}
-
 
 // --- Traits
 
@@ -363,6 +357,51 @@ macro_rules! point_container_type {
     )
 }
 
+macro_rules! geometry_container_type {
+    // line and polygon containers
+    ($geotypetrait:ident for $geotype:ident contains $itemtype:ident named $itemname:ident) => (
+        #[derive(PartialEq, Clone, Debug)]
+        pub struct $geotype<P: postgis::Point + EwkbRead> {
+            pub $itemname: Vec<$itemtype<P>>,
+            pub srid: Option<i32>,
+        }
+
+        impl<P> $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            pub fn new() -> $geotype<P> {
+                $geotype { $itemname: Vec::new(), srid: None }
+            }
+        }
+
+        impl<P> FromIterator<$itemtype<P>> for $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            #[inline]
+            fn from_iter<I: IntoIterator<Item=$itemtype<P>>>(iterable: I) -> $geotype<P> {
+                let iterator = iterable.into_iter();
+                let (lower, _) = iterator.size_hint();
+                let mut ret = $geotype::new();
+                ret.$itemname.reserve(lower);
+                for item in iterator {
+                    ret.$itemname.push(item);
+                }
+                ret
+            }
+        }
+
+        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
+            where P: 'a + postgis::Point + EwkbRead
+        {
+            type ItemType = $itemtype<P>;
+            type Iter = Iter<'a, Self::ItemType>;
+            fn $itemname(&'a self) -> Self::Iter {
+                self.$itemname.iter()
+            }
+        }
+    )
+}
+
 macro_rules! impl_read_for_point_container_type {
     (singletype $geotype:ident) => (
 
@@ -383,6 +422,49 @@ macro_rules! impl_read_for_point_container_type {
                     //points.push($itemtype::read_ewkb(raw).unwrap());
                 }
                 Ok($geotype::<P> {points: points, srid: srid})
+            }
+        }
+    )
+}
+
+macro_rules! impl_read_for_geometry_container_type {
+    (singletype $geotype:ident contains $itemtype:ident named $itemname:ident) => (
+        impl<P> EwkbRead for $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            fn point_type() -> postgis::PointType {
+                P::point_type()
+            }
+            fn set_srid(&mut self, srid: Option<i32>) {
+                self.srid = srid;
+            }
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+                let mut $itemname: Vec<$itemtype<P>> = vec![];
+                let size = try!(read_u32(raw, is_be)) as usize;
+                for _ in 0..size {
+                    $itemname.push($itemtype::read_ewkb_body(raw, is_be, srid).unwrap());
+                 }
+                Ok($geotype::<P> {$itemname: $itemname, srid: srid})
+            }
+        }
+    );
+    (multitype $geotype:ident contains $itemtype:ident named $itemname:ident) => (
+        impl<P> EwkbRead for $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            fn point_type() -> postgis::PointType {
+                P::point_type()
+            }
+            fn set_srid(&mut self, srid: Option<i32>) {
+                self.srid = srid;
+            }
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+                let mut $itemname: Vec<$itemtype<P>> = vec![];
+                let size = try!(read_u32(raw, is_be)) as usize;
+                for _ in 0..size {
+                    $itemname.push($itemtype::read_ewkb(raw).unwrap());
+                 }
+                Ok($geotype::<P> {$itemname: $itemname, srid: srid})
             }
         }
     )
@@ -450,75 +532,6 @@ macro_rules! point_container_write {
     )
 }
 
-macro_rules! geometry_container_type {
-    // line and polygon containers
-    ($geotypetrait:ident for $geotype:ident contains $itemtype:ident named $itemname:ident) => (
-        #[derive(PartialEq, Clone, Debug)]
-        pub struct $geotype<P: postgis::Point + EwkbRead> {
-            pub $itemname: Vec<$itemtype<P>>,
-            pub srid: Option<i32>,
-        }
-
-        impl<P> $geotype<P>
-            where P: postgis::Point + EwkbRead
-        {
-            pub fn new() -> $geotype<P> {
-                $geotype { $itemname: Vec::new(), srid: None }
-            }
-        }
-
-        impl<P> FromIterator<$itemtype<P>> for $geotype<P>
-            where P: postgis::Point + EwkbRead
-        {
-            #[inline]
-            fn from_iter<I: IntoIterator<Item=$itemtype<P>>>(iterable: I) -> $geotype<P> {
-                let iterator = iterable.into_iter();
-                let (lower, _) = iterator.size_hint();
-                let mut ret = $geotype::new();
-                ret.$itemname.reserve(lower);
-                for item in iterator {
-                    ret.$itemname.push(item);
-                }
-                ret
-            }
-        }
-
-        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
-            where P: 'a + postgis::Point + EwkbRead
-        {
-            type ItemType = $itemtype<P>;
-            type Iter = Iter<'a, Self::ItemType>;
-            fn $itemname(&'a self) -> Self::Iter {
-                self.$itemname.iter()
-            }
-        }
-    )
-}
-
-macro_rules! impl_read_for_geometry_container_type {
-    (multitype $geotype:ident contains $itemtype:ident named $itemname:ident) => (
-        impl<P> EwkbRead for $geotype<P>
-            where P: postgis::Point + EwkbRead
-        {
-            fn point_type() -> postgis::PointType {
-                P::point_type()
-            }
-            fn set_srid(&mut self, srid: Option<i32>) {
-                self.srid = srid;
-            }
-            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
-                let mut $itemname: Vec<$itemtype<P>> = vec![];
-                let size = try!(read_u32(raw, is_be)) as usize;
-                for _ in 0..size {
-                    //$itemname.push($itemtype::read_ewkb_body(raw, is_be, srid).unwrap());
-                    $itemname.push($itemtype::read_ewkb(raw).unwrap());
-                 }
-                Ok($geotype::<P> {$itemname: $itemname, srid: srid})
-            }
-        }
-    )
-}
-
 macro_rules! geometry_container_write {
     ($geotypetrait:ident and $asewkbtype:ident for $geotype:ident to $ewkbtype:ident with type code $typecode:expr, contains $ewkbitemtype:ident, $itemtype:ident as $itemtypetrait:ident named $itemname:ident, command $writecmd:ident) => (
 
@@ -568,7 +581,7 @@ macro_rules! geometry_container_write {
             }
 
             fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-                try!(w.write_u32::<LittleEndian>(self.geom.lines().len() as u32));
+                try!(w.write_u32::<LittleEndian>(self.geom.$itemname().len() as u32));
                 for geom in self.geom.$itemname() {
                     let wkb = $ewkbitemtype { geom: geom, srid: self.srid, point_type: self.point_type.clone() };
                     try!(wkb.$writecmd(w));
@@ -598,6 +611,25 @@ impl_read_for_point_container_type!(singletype LineStringT);
 point_container_write!(LineString and AsEwkbLineString for LineStringT
                        to EwkbLineString with type code 0x02,
                        command write_ewkb_body);
+
+pub type LineString = LineStringT<Point>;
+pub type LineStringZ = LineStringT<PointZ>;
+pub type LineStringM = LineStringT<PointM>;
+pub type LineStringZM = LineStringT<PointZM>;
+
+/// Polygon
+geometry_container_type!(Polygon for PolygonT contains LineStringT named rings);
+impl_read_for_geometry_container_type!(singletype PolygonT contains LineStringT named rings);
+geometry_container_write!(Polygon and AsEwkbPolygon for PolygonT
+                          to EwkbPolygon with type code 0x03,
+                          contains EwkbLineString,LineStringT as LineString named rings,
+                          command write_ewkb_body);
+
+pub type Polygon = PolygonT<Point>;
+pub type PolygonZ = PolygonT<PointZ>;
+pub type PolygonM = PolygonT<PointM>;
+pub type PolygonZM = PolygonT<PointZM>;
+
 /// MultiLineString
 geometry_container_type!(MultiLineString for MultiLineStringT contains LineStringT named lines);
 impl_read_for_geometry_container_type!(multitype MultiLineStringT contains LineStringT named lines);
@@ -606,53 +638,10 @@ geometry_container_write!(MultiLineString and AsEwkbMultiLineString for MultiLin
                           contains EwkbLineString,LineStringT as LineString named lines,
                           command write_ewkb);
 
-
-pub type LineString = LineStringT<Point>;
-pub type LineStringZ = LineStringT<PointZ>;
-pub type LineStringM = LineStringT<PointM>;
-pub type LineStringZM = LineStringT<PointZM>;
-
 pub type MultiLineString = MultiLineStringT<Point>;
 pub type MultiLineStringZ = MultiLineStringT<PointZ>;
 pub type MultiLineStringM = MultiLineStringT<PointM>;
 pub type MultiLineStringZM = MultiLineStringT<PointZM>;
-
-
-// --- Polygon
-
-impl<P> EwkbRead for PolygonT<P>
-    where P: postgis::Point + EwkbRead
-{
-    fn point_type() -> postgis::PointType {
-        P::point_type()
-    }
-    fn set_srid(&mut self, srid: Option<i32>) {
-        self.srid = srid;
-    }
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
-        let mut rings: Vec<LineStringT<P>> = vec![];
-        let size = try!(read_u32(raw, is_be)) as usize;
-        for _ in 0..size {
-            rings.push(LineStringT::read_ewkb_body(raw, is_be, srid).unwrap());
-        }
-        Ok(PolygonT::<P> {rings: rings, srid: srid})
-    }
-}
-
-impl<'a, P> postgis::Polygon<'a> for PolygonT<P>
-    where P: 'a + postgis::Point + EwkbRead
-{
-    type ItemType = LineStringT<P>;
-    type Iter = Iter<'a, Self::ItemType>;
-    fn rings(&'a self) -> Self::Iter {
-        self.rings.iter()
-    }
-}
-
-pub type Polygon = PolygonT<Point>;
-pub type PolygonZ = PolygonT<PointZ>;
-pub type PolygonM = PolygonT<PointM>;
-pub type PolygonZM = PolygonT<PointZM>;
 
 
 #[test]
@@ -698,6 +687,15 @@ fn test_line_write() {
     // 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'
     let line = LineStringT::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
+}
+
+#[test]
+fn test_polygon_write() {
+    let p = |x, y| Point { x: x, y: y, srid: None };
+    // SELECT 'POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
+    let line = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
+    let poly = PolygonT::<Point> {srid: None, rings: vec![line]};
+    assert_eq!(poly.as_ewkb().to_hex_ewkb(), "010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
 }
 
 #[test]
