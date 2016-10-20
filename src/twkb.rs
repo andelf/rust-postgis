@@ -1,5 +1,5 @@
 use types as postgis;
-use types::{AsEwkbPoint, AsEwkbLineString, EwkbPoint, EwkbLineString};
+use ewkb::{AsEwkbPoint, EwkbPoint, AsEwkbLineString, EwkbLineString};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;

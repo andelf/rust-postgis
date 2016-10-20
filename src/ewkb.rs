@@ -1,5 +1,4 @@
 use types as postgis;
-use types::{EwkbPoint, AsEwkbPoint, EwkbLineString, AsEwkbLineString, EwkbMultiLineString, AsEwkbMultiLineString};
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -271,6 +270,16 @@ impl_point_read_traits!(PointM);
 impl_point_read_traits!(PointZM);
 
 
+pub struct EwkbPoint<'a> {
+    pub geom: &'a postgis::Point,
+    pub srid: Option<i32>,
+    pub point_type: postgis::PointType,
+}
+
+pub trait AsEwkbPoint<'a> {
+    fn as_ewkb(&'a self) -> EwkbPoint<'a>;
+}
+
 impl<'a> fmt::Debug for EwkbPoint<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "EwkbPoint")); //TODO
@@ -370,6 +379,21 @@ macro_rules! define_geometry_container_type {
             fn points(&'a self) -> Self::Iter {
                 self.points.iter()
             }
+        }
+
+        pub struct $ewkbtype<'a, P, I>
+            where P: 'a + postgis::Point,
+                  I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>
+        {
+            pub geom: &'a postgis::$geotypetrait<'a, ItemType=P, Iter=I>,
+            pub srid: Option<i32>,
+            pub point_type: postgis::PointType,
+        }
+
+        pub trait $asewkbtype<'a> {
+            type PointType: 'a + postgis::Point;
+            type Iter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
+            fn as_ewkb(&'a self) -> $ewkbtype<'a, Self::PointType, Self::Iter>;
         }
 
         impl<'a, T, I> fmt::Debug for $ewkbtype<'a, T, I>
@@ -475,6 +499,25 @@ macro_rules! define_geometry_container_type {
             fn $itemname(&'a self) -> Self::Iter {
                 self.$itemname.iter()
             }
+        }
+
+        pub struct $ewkbtype<'a, P, I, T, J>
+            where P: 'a + postgis::Point,
+                  I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+                  T: 'a + postgis::$itemtypetrait<'a, ItemType=P, Iter=I>,
+                  J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+        {
+            pub geom: &'a postgis::$geotypetrait<'a, ItemType=T, Iter=J>,
+            pub srid: Option<i32>,
+            pub point_type: postgis::PointType,
+        }
+
+        pub trait $asewkbtype<'a> {
+            type PointType: 'a + postgis::Point;
+            type PointIter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
+            type ItemType: 'a + postgis::$itemtypetrait<'a, ItemType=Self::PointType, Iter=Self::PointIter>;
+            type Iter: Iterator<Item=&'a Self::ItemType>+ExactSizeIterator<Item=&'a Self::ItemType>;
+            fn as_ewkb(&'a self) -> $ewkbtype<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter>;
         }
 
         impl<'a, P, I, T, J> fmt::Debug for $ewkbtype<'a, P, I, T, J>

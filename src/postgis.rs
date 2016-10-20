@@ -1,5 +1,5 @@
-use types::{Point, AsEwkbPoint, AsEwkbLineString, EwkbPoint, EwkbLineString};
-use ewkb::{self, EwkbRead, EwkbWrite};
+use types::{Point};
+use ewkb::{self, EwkbRead, EwkbWrite, AsEwkbPoint, EwkbPoint, AsEwkbLineString, EwkbLineString};
 use twkb::{self, TwkbGeom};
 use std;
 use std::io::prelude::*;
@@ -131,9 +131,8 @@ mod tests {
     use postgres::Connection;
     use std::env;
     use std::error::Error;
-    use types::{AsEwkbPoint, AsEwkbLineString};
     use types as postgis;
-    use ewkb;
+    use ewkb::{self, AsEwkbPoint, AsEwkbLineString};
     use twkb;
 
     macro_rules! or_panic {
