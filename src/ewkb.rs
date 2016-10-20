@@ -319,9 +319,9 @@ impl EwkbWrite for Point {
 */
 
 
-macro_rules! define_geometry_container_type {
+macro_rules! point_container_type {
     // points container
-    ($geotypetrait:ident and $asewkbtype:ident for $geotype:ident to $ewkbtype:ident with type code $typecode:expr, contains points) => (
+    ($geotypetrait:ident for $geotype:ident) => (
 
         #[derive(PartialEq, Clone, Debug)]
         pub struct $geotype<P: postgis::Point + EwkbRead> {
@@ -351,6 +351,21 @@ macro_rules! define_geometry_container_type {
             }
         }
 
+        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
+            where P: 'a + postgis::Point + EwkbRead
+        {
+            type ItemType = P;
+            type Iter = Iter<'a, Self::ItemType>;
+            fn points(&'a self) -> Self::Iter {
+                self.points.iter()
+            }
+        }
+    )
+}
+
+macro_rules! impl_read_for_point_container_type {
+    (singletype $geotype:ident) => (
+
         impl<P> EwkbRead for $geotype<P>
             where P: postgis::Point + EwkbRead
         {
@@ -370,16 +385,11 @@ macro_rules! define_geometry_container_type {
                 Ok($geotype::<P> {points: points, srid: srid})
             }
         }
+    )
+}
 
-        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
-            where P: 'a + postgis::Point + EwkbRead
-        {
-            type ItemType = P;
-            type Iter = Iter<'a, Self::ItemType>;
-            fn points(&'a self) -> Self::Iter {
-                self.points.iter()
-            }
-        }
+macro_rules! point_container_write {
+    ($geotypetrait:ident and $asewkbtype:ident for $geotype:ident to $ewkbtype:ident with type code $typecode:expr, command $writecmd:ident) => (
 
         pub struct $ewkbtype<'a, P, I>
             where P: 'a + postgis::Point,
@@ -422,8 +432,7 @@ macro_rules! define_geometry_container_type {
                 try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
                 for geom in self.geom.points() {
                     let wkb = EwkbPoint { geom: geom, srid: self.srid, point_type: self.point_type.clone() };
-                    try!(wkb.write_ewkb_body(w));
-                    //try!(wkb.write_ewkb(w));
+                    try!(wkb.$writecmd(w));
                 }
                 Ok(())
             }
@@ -438,9 +447,12 @@ macro_rules! define_geometry_container_type {
                 $ewkbtype { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
             }
         }
-    );
-    // common geo type contrainer
-    ($geotypetrait:ident and $asewkbtype:ident for $geotype:ident to $ewkbtype:ident with type code $typecode:expr, contains $ewkbitemtype:ident, $itemtype:ident as $itemtypetrait:ident named $itemname:ident) => (
+    )
+}
+
+macro_rules! geometry_container_type {
+    // line and polygon containers
+    ($geotypetrait:ident for $geotype:ident contains $itemtype:ident named $itemname:ident) => (
         #[derive(PartialEq, Clone, Debug)]
         pub struct $geotype<P: postgis::Point + EwkbRead> {
             pub $itemname: Vec<$itemtype<P>>,
@@ -471,6 +483,20 @@ macro_rules! define_geometry_container_type {
             }
         }
 
+        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
+            where P: 'a + postgis::Point + EwkbRead
+        {
+            type ItemType = $itemtype<P>;
+            type Iter = Iter<'a, Self::ItemType>;
+            fn $itemname(&'a self) -> Self::Iter {
+                self.$itemname.iter()
+            }
+        }
+    )
+}
+
+macro_rules! impl_read_for_geometry_container_type {
+    (multitype $geotype:ident contains $itemtype:ident named $itemname:ident) => (
         impl<P> EwkbRead for $geotype<P>
             where P: postgis::Point + EwkbRead
         {
@@ -490,16 +516,11 @@ macro_rules! define_geometry_container_type {
                 Ok($geotype::<P> {$itemname: $itemname, srid: srid})
             }
         }
+    )
+}
 
-        impl<'a, P> postgis::$geotypetrait<'a> for $geotype<P>
-            where P: 'a + postgis::Point + EwkbRead
-        {
-            type ItemType = $itemtype<P>;
-            type Iter = Iter<'a, Self::ItemType>;
-            fn $itemname(&'a self) -> Self::Iter {
-                self.$itemname.iter()
-            }
-        }
+macro_rules! geometry_container_write {
+    ($geotypetrait:ident and $asewkbtype:ident for $geotype:ident to $ewkbtype:ident with type code $typecode:expr, contains $ewkbitemtype:ident, $itemtype:ident as $itemtypetrait:ident named $itemname:ident, command $writecmd:ident) => (
 
         pub struct $ewkbtype<'a, P, I, T, J>
             where P: 'a + postgis::Point,
@@ -543,15 +564,14 @@ macro_rules! define_geometry_container_type {
             }
 
             fn type_id(&self) -> u32 {
-                0x05 | Self::wkb_type_id(&self.point_type, self.srid)
+                $typecode | Self::wkb_type_id(&self.point_type, self.srid)
             }
 
             fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
                 try!(w.write_u32::<LittleEndian>(self.geom.lines().len() as u32));
-                for geom in self.geom.lines() {
+                for geom in self.geom.$itemname() {
                     let wkb = $ewkbitemtype { geom: geom, srid: self.srid, point_type: self.point_type.clone() };
-                    //try!(wkb.write_ewkb_body(w));
-                    try!(wkb.write_ewkb(w));
+                    try!(wkb.$writecmd(w));
                 }
                 Ok(())
             }
@@ -573,9 +593,18 @@ macro_rules! define_geometry_container_type {
 
 
 /// LineString
-define_geometry_container_type!(LineString and AsEwkbLineString for LineStringT to EwkbLineString with type code 0x02, contains points);
+point_container_type!(LineString for LineStringT);
+impl_read_for_point_container_type!(singletype LineStringT);
+point_container_write!(LineString and AsEwkbLineString for LineStringT
+                       to EwkbLineString with type code 0x02,
+                       command write_ewkb_body);
 /// MultiLineString
-define_geometry_container_type!(MultiLineString and AsEwkbMultiLineString for MultiLineStringT to EwkbMultiLineString with type code 0x05, contains EwkbLineString,LineStringT as LineString named lines);
+geometry_container_type!(MultiLineString for MultiLineStringT contains LineStringT named lines);
+impl_read_for_geometry_container_type!(multitype MultiLineStringT contains LineStringT named lines);
+geometry_container_write!(MultiLineString and AsEwkbMultiLineString for MultiLineStringT
+                          to EwkbMultiLineString with type code 0x05,
+                          contains EwkbLineString,LineStringT as LineString named lines,
+                          command write_ewkb);
 
 
 pub type LineString = LineStringT<Point>;
