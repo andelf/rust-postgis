@@ -15,16 +15,28 @@ pub trait LineString<'a> {
     fn points(&'a self) -> Self::Iter;
 }
 
+pub trait Polygon<'a> {
+    type ItemType: 'a + LineString<'a>;
+    type Iter: Iterator<Item=&'a Self::ItemType>;
+    fn rings(&'a self) -> Self::Iter;
+}
+
+pub trait MultiPoint<'a> {
+    type ItemType: 'a + Point;
+    type Iter: Iterator<Item=&'a Self::ItemType>;
+    fn points(&'a self) -> Self::Iter;
+}
+
 pub trait MultiLineString<'a> {
     type ItemType: 'a + LineString<'a>;
     type Iter: Iterator<Item=&'a Self::ItemType>;
     fn lines(&'a self) -> Self::Iter;
 }
 
-pub trait Polygon<'a> {
-    type ItemType: 'a + LineString<'a>;
+pub trait MultiPolygon<'a> {
+    type ItemType: 'a + Polygon<'a>;
     type Iter: Iterator<Item=&'a Self::ItemType>;
-    fn rings(&'a self) -> Self::Iter;
+    fn polygons(&'a self) -> Self::Iter;
 }
 
 // --- Adapter structs and traits for EWKB output
