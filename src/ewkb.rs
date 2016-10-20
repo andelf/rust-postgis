@@ -419,7 +419,27 @@ macro_rules! impl_read_for_point_container_type {
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
                     points.push(P::read_ewkb_body(raw, is_be, srid).unwrap());
-                    //points.push($itemtype::read_ewkb(raw).unwrap());
+                }
+                Ok($geotype::<P> {points: points, srid: srid})
+            }
+        }
+    );
+    (multitype $geotype:ident) => (
+
+        impl<P> EwkbRead for $geotype<P>
+            where P: postgis::Point + EwkbRead
+        {
+            fn point_type() -> postgis::PointType {
+                P::point_type()
+            }
+            fn set_srid(&mut self, srid: Option<i32>) {
+                self.srid = srid;
+            }
+            fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
+                let mut points: Vec<P> = vec![];
+                let size = try!(read_u32(raw, is_be)) as usize;
+                for _ in 0..size {
+                    points.push(P::read_ewkb(raw).unwrap());
                 }
                 Ok($geotype::<P> {points: points, srid: srid})
             }
@@ -513,7 +533,7 @@ macro_rules! point_container_write {
             fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
                 try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
                 for geom in self.geom.points() {
-                    let wkb = EwkbPoint { geom: geom, srid: self.srid, point_type: self.point_type.clone() };
+                    let wkb = EwkbPoint { geom: geom, srid: None, point_type: self.point_type.clone() };
                     try!(wkb.$writecmd(w));
                 }
                 Ok(())
@@ -561,7 +581,7 @@ macro_rules! geometry_container_write {
                   J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                try!(write!(f, "EwkbMultiLineString")); //TODO
+                try!(write!(f, "$ewkbtype")); //TODO
                 Ok(())
             }
         }
@@ -630,6 +650,18 @@ pub type PolygonZ = PolygonT<PointZ>;
 pub type PolygonM = PolygonT<PointM>;
 pub type PolygonZM = PolygonT<PointZM>;
 
+/// MultiPoint
+point_container_type!(MultiPoint for MultiPointT);
+impl_read_for_point_container_type!(multitype MultiPointT);
+point_container_write!(MultiPoint and AsEwkbMultiPoint for MultiPointT
+                       to EwkbMultiPoint with type code 0x04,
+                       command write_ewkb);
+
+pub type MultiPoint = MultiPointT<Point>;
+pub type MultiPointZ = MultiPointT<PointZ>;
+pub type MultiPointM = MultiPointT<PointM>;
+pub type MultiPointZM = MultiPointT<PointZM>;
+
 /// MultiLineString
 geometry_container_type!(MultiLineString for MultiLineStringT contains LineStringT named lines);
 impl_read_for_geometry_container_type!(multitype MultiLineStringT contains LineStringT named lines);
@@ -643,6 +675,20 @@ pub type MultiLineStringZ = MultiLineStringT<PointZ>;
 pub type MultiLineStringM = MultiLineStringT<PointM>;
 pub type MultiLineStringZM = MultiLineStringT<PointZM>;
 
+/*
+/// MultiPolygon
+geometry_container_type!(MultiPolygon for MultiPolygonT contains PolygonT named polygons);
+impl_read_for_geometry_container_type!(multitype MultiPolygonT contains PolygonT named polygons);
+geometry_container_write!(MultiPolygon and AsEwkbMultiPolygon for MultiPolygonT
+                          to EwkbMultiPolygon with type code 0x06,
+                          contains EwkbPolygon,PolygonT as Polygon named polygons,
+                          command write_ewkb);
+
+pub type MultiPolygon = MultiPolygonT<Point>;
+pub type MultiPolygonZ = MultiPolygonT<PointZ>;
+pub type MultiPolygonM = MultiPolygonT<PointM>;
+pub type MultiPolygonZM = MultiPolygonT<PointZM>;
+*/
 
 #[test]
 fn test_point_write() {
@@ -696,6 +742,14 @@ fn test_polygon_write() {
     let line = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
     let poly = PolygonT::<Point> {srid: None, rings: vec![line]};
     assert_eq!(poly.as_ewkb().to_hex_ewkb(), "010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
+}
+
+#[test]
+fn test_multipoint_write() {
+    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: Some(4326) };
+    // SELECT 'SRID=4326;MULTIPOINT ((10 -20 100), (0 -0.5 101))'::geometry
+    let points = MultiPointT::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
+    assert_eq!(points.as_ewkb().to_hex_ewkb(), "01040000A0E6100000020000000101000080000000000000244000000000000034C0000000000000594001010000800000000000000000000000000000E0BF0000000000405940");
 }
 
 #[test]
@@ -761,10 +815,29 @@ fn test_line_read() {
     assert_eq!(line, LineStringT::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]});
 
     let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: Some(4326) };
-    // SELECT 'SRID=4326;LINESTRING (10 -20 100, 0 0.5 101)'::geometry
+    // SELECT 'SRID=4326;LINESTRING (10 -20 100, 0 -0.5 101)'::geometry
     let ewkb = hex_to_vec("01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
     let line = LineStringT::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(line, LineStringT::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
+}
+
+#[test]
+fn test_polygon_read() {
+    let p = |x, y| Point { x: x, y: y, srid: None };
+    // SELECT 'POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
+    let ewkb = hex_to_vec("010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
+    let poly = PolygonT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    let line = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
+    assert_eq!(poly, PolygonT::<Point> {srid: None, rings: vec![line]});
+}
+
+#[test]
+fn test_multipoint_read() {
+    let p = |x, y, z| PointZ { x: x, y: y, z: z, srid: None }; //FIXME: Some(4326)
+    // SELECT 'SRID=4326;MULTIPOINT ((10 -20 100), (0 -0.5 101))'::geometry
+    let ewkb = hex_to_vec("01040000A0E6100000020000000101000080000000000000244000000000000034C0000000000000594001010000800000000000000000000000000000E0BF0000000000405940");
+    let points = MultiPointT::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(points, MultiPointT::<PointZ> {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]});
 }
 
 #[test]
@@ -776,16 +849,6 @@ fn test_multline_read() {
     let line1 = LineStringT::<Point> {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
     let line2 = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.)]};
     assert_eq!(poly, MultiLineStringT::<Point> {srid: None, lines: vec![line1, line2]});
-}
-
-#[test]
-fn test_polygon_read() {
-    let p = |x, y| Point { x: x, y: y, srid: None };
-    // SELECT 'POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
-    let ewkb = hex_to_vec("010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
-    let poly = PolygonT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    let line = LineStringT::<Point> {srid: None, points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
-    assert_eq!(poly, PolygonT::<Point> {srid: None, rings: vec![line]});
 }
 
 #[test]
