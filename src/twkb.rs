@@ -29,11 +29,29 @@ pub struct Polygon {
     pub rings: Vec<LineString>,
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub struct MultiPoint {
+    pub points: Vec<Point>,
+    pub ids: Option<Vec<u64>>,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct MultiLineString {
+    pub lines: Vec<LineString>,
+    pub ids: Option<Vec<u64>>,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct MultiPolygon {
+    pub polygons: Vec<Polygon>,
+    pub ids: Option<Vec<u64>>,
+}
+
 #[derive(Default,Debug)]
 pub struct TwkbInfo {
     geom_type: u8,
     precision: i8,
-    has_id_list: bool,
+    has_idlist: bool,
     is_empty_geom: bool,
     size: Option<u64>,
     has_z: bool,
@@ -57,7 +75,7 @@ pub trait TwkbGeom: fmt::Debug + Sized {
         let metadata_header = try!(raw.read_u8());
         let has_bbox = (metadata_header & 0b0001) != 0;
         let has_size_attribute = (metadata_header & 0b0010) != 0;
-        twkb_info.has_id_list = (metadata_header & 0b0100) != 0;
+        twkb_info.has_idlist = (metadata_header & 0b0100) != 0;
         let has_ext_prec_info = (metadata_header & 0b1000) != 0;
         twkb_info.is_empty_geom = (metadata_header & 0b10000) != 0;
         if has_ext_prec_info {
@@ -89,7 +107,7 @@ pub trait TwkbGeom: fmt::Debug + Sized {
 
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error>;
 
-    fn read_point<R: Read>(raw: &mut R, twkb_info: &TwkbInfo, x: f64, y: f64, z: Option<f64>, m: Option<f64>)
+    fn read_relative_point<R: Read>(raw: &mut R, twkb_info: &TwkbInfo, x: f64, y: f64, z: Option<f64>, m: Option<f64>)
         -> Result<(f64, f64, Option<f64>, Option<f64>), Error>
     {
         let x2 = x + try!(read_varint64_as_f64(raw, twkb_info.precision));
@@ -107,6 +125,17 @@ pub trait TwkbGeom: fmt::Debug + Sized {
             None
         };
         Ok((x2, y2, z2, m2))
+    }
+
+    fn read_idlist<R: Read>(raw: &mut R, size: usize) -> Result<Vec<u64>, Error>
+    {
+        let mut idlist = Vec::new();
+        idlist.reserve(size);
+        for _ in 0..size {
+            let id = try!(read_raw_varint64(raw));
+            idlist.push(id);
+        }
+        Ok(idlist)
     }
 }
 
@@ -208,7 +237,7 @@ impl TwkbGeom for LineString {
             let mut z = if twkb_info.has_z { Some(0.0) } else { None };
             let mut m = if twkb_info.has_m { Some(0.0) } else { None };
             for _ in 0..npoints {
-                let (x2, y2, z2, m2) = try!(Self::read_point(raw, twkb_info, x, y, z, m));
+                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                 x = x2; y = y2; z = z2; m = m2;
             }
@@ -238,7 +267,7 @@ impl TwkbGeom for Polygon {
             points.reserve(npoints as usize);
             let (x0, y0, z0, m0) = (x, y, z, m);
             for _ in 0..npoints {
-                let (x2, y2, z2, m2) = try!(Self::read_point(raw, twkb_info, x, y, z, m));
+                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                 x = x2; y = y2; z = z2; m = m2;
             }
@@ -249,6 +278,126 @@ impl TwkbGeom for Polygon {
             rings.push(LineString {points: points});
         }
         Ok(Polygon {rings: rings})
+    }
+}
+
+
+impl TwkbGeom for MultiPoint {
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
+        // npoints           uvarint
+        // [idlist]          varint[]
+        // pointarray        varint[]
+        let mut points: Vec<Point> = Vec::new();
+        let mut ids: Option<Vec<u64>> = None;
+        if !twkb_info.is_empty_geom {
+            let npoints = try!(read_raw_varint64(raw));
+            points.reserve(npoints as usize);
+
+            if twkb_info.has_idlist {
+                let idlist = try!(Self::read_idlist(raw, npoints as usize));
+                ids = Some(idlist);
+            }
+
+            let mut x = 0.0;
+            let mut y = 0.0;
+            let mut z = if twkb_info.has_z { Some(0.0) } else { None };
+            let mut m = if twkb_info.has_m { Some(0.0) } else { None };
+            for _ in 0..npoints {
+                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
+                x = x2; y = y2; z = z2; m = m2;
+            }
+        }
+        Ok(MultiPoint {points: points, ids: ids})
+    }
+}
+
+impl TwkbGeom for MultiLineString {
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
+        // nlinestrings      uvarint
+        // [idlist]          varint[]
+        // npoints[0]        uvarint
+        // pointarray[0]     varint[]
+        // ...
+        // npoints[n]        uvarint
+        // pointarray[n]     varint[]
+        let mut lines: Vec<LineString> = Vec::new();
+        let mut ids: Option<Vec<u64>> = None;
+        let nlines = try!(read_raw_varint64(raw));
+        lines.reserve(nlines as usize);
+
+        if twkb_info.has_idlist {
+            let idlist = try!(Self::read_idlist(raw, nlines as usize));
+            ids = Some(idlist);
+        }
+
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut z = if twkb_info.has_z { Some(0.0) } else { None };
+        let mut m = if twkb_info.has_m { Some(0.0) } else { None };
+        for _ in 0..nlines {
+            let mut points: Vec<Point> = Vec::new();
+            let npoints = try!(read_raw_varint64(raw));
+            points.reserve(npoints as usize);
+            for _ in 0..npoints {
+                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
+                x = x2; y = y2; z = z2; m = m2;
+            }
+            lines.push(LineString {points: points});
+        }
+        Ok(MultiLineString {lines: lines, ids: ids})
+    }
+}
+
+impl TwkbGeom for MultiPolygon {
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
+        // npolygons         uvarint
+        // [idlist]          varint[]
+        // nrings[0]         uvarint
+        // npoints[0][0]     uvarint
+        // pointarray[0][0]  varint[]
+        // ...
+        // nrings[n]         uvarint
+        // npoints[n][m]     uvarint
+        // pointarray[n][m]  varint[]
+        let mut polygons: Vec<Polygon> = Vec::new();
+        let mut ids: Option<Vec<u64>> = None;
+        let npolygons = try!(read_raw_varint64(raw));
+        polygons.reserve(npolygons as usize);
+
+        if twkb_info.has_idlist {
+            let idlist = try!(Self::read_idlist(raw, npolygons as usize));
+            ids = Some(idlist);
+        }
+
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut z = if twkb_info.has_z { Some(0.0) } else { None };
+        let mut m = if twkb_info.has_m { Some(0.0) } else { None };
+        for _ in 0..npolygons {
+            let mut rings: Vec<LineString> = Vec::new();
+            let nrings = try!(read_raw_varint64(raw));
+            rings.reserve(nrings as usize);
+            for _ in 0..nrings {
+                let mut points: Vec<Point> = Vec::new();
+                let npoints = try!(read_raw_varint64(raw));
+                points.reserve(npoints as usize);
+                let (x0, y0, z0, m0) = (x, y, z, m);
+                for _ in 0..npoints {
+                    let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                    points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
+                    x = x2; y = y2; z = z2; m = m2;
+                }
+                // close ring, if necessary
+                if x != x0 && y != y0 && z != z0 && m != m0 {
+                    points.push(Point::new_from_opt_vals(x0, y0, z0, m0));
+                }
+                rings.push(LineString {points: points});
+            }
+            polygons.push(Polygon {rings: rings});
+        }
+        Ok(MultiPolygon {polygons: polygons, ids: ids})
     }
 }
 
@@ -330,6 +479,27 @@ fn test_read_polygon() {
     let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
     let poly = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", poly), "Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }, LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }");
+}
+
+#[test]
+fn test_read_multipoint() {
+    let twkb = hex_to_vec("04000214271326"); // SELECT encode(ST_AsTWKB('MULTIPOINT ((10 -20), (0 -0.5))'::geometry), 'hex')
+    let points = MultiPoint::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", points), "MultiPoint { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }], ids: None }");
+}
+
+#[test]
+fn test_read_multiline() {
+    let twkb = hex_to_vec("05000202142713260200020400"); // SELECT encode(ST_AsTWKB('MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry), 'hex')
+    let lines = MultiLineString::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", lines), "MultiLineString { lines: [LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }] }, LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }] }], ids: None }");
+}
+
+#[test]
+fn test_read_multipolygon() {
+    let twkb = hex_to_vec("060002010500000400000403000003010514141700001718000018"); // SELECT encode(ST_AsTWKB('MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry), 'hex')
+    let polys = MultiPolygon::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", polys), "MultiPolygon { polygons: [Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }] }, Polygon { rings: [LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }], ids: None }");
 }
 
 #[test]
