@@ -9,15 +9,24 @@ use std::slice::Iter;
 use byteorder::ReadBytesExt;
 use error::Error;
 
+// Tiny WKB specification: https://github.com/TWKB/Specification/blob/master/twkb.md
+
+
 #[derive(PartialEq, Clone, Debug)]
 pub struct Point {
     pub x: f64,
     pub y: f64
+    // TODO: support for z, m
 }
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct LineString {
     pub points: Vec<Point>,
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Polygon {
+    pub rings: Vec<LineString>,
 }
 
 #[derive(Default,Debug)]
@@ -79,6 +88,26 @@ pub trait TwkbGeom: fmt::Debug + Sized {
     }
 
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error>;
+
+    fn read_point<R: Read>(raw: &mut R, twkb_info: &TwkbInfo, x: f64, y: f64, z: Option<f64>, m: Option<f64>)
+        -> Result<(f64, f64, Option<f64>, Option<f64>), Error>
+    {
+        let x2 = x + try!(read_varint64_as_f64(raw, twkb_info.precision));
+        let y2 = y + try!(read_varint64_as_f64(raw, twkb_info.precision));
+        let z2 = if twkb_info.has_z {
+            let dz = try!(read_varint64_as_f64(raw, twkb_info.precision));
+            z.map(|v| v + dz)
+        } else {
+            None
+        };
+        let m2 = if twkb_info.has_m {
+            let dm = try!(read_varint64_as_f64(raw, twkb_info.precision));
+            m.map(|v| v + dm)
+        } else {
+            None
+        };
+        Ok((x2, y2, z2, m2))
+    }
 }
 
 // --- helper functions for reading ---
@@ -170,31 +199,56 @@ impl TwkbGeom for LineString {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
         // npoints           uvarint
         // pointarray        varint[]
-        let mut points: Vec<Point> = vec![];
+        let mut points: Vec<Point> = Vec::new();
         if !twkb_info.is_empty_geom {
             let npoints = try!(read_raw_varint64(raw));
+            points.reserve(npoints as usize);
             let mut x = 0.0;
             let mut y = 0.0;
             let mut z = if twkb_info.has_z { Some(0.0) } else { None };
             let mut m = if twkb_info.has_m { Some(0.0) } else { None };
             for _ in 0..npoints {
-                let dx = try!(read_varint64_as_f64(raw, twkb_info.precision));
-                x += dx;
-                let dy = try!(read_varint64_as_f64(raw, twkb_info.precision));
-                y += dy;
-                if twkb_info.has_z {
-                    let dz = try!(read_varint64_as_f64(raw, twkb_info.precision));
-                    z = z.map(|v| v + dz);
-                };
-                if twkb_info.has_m {
-                    let dm = try!(read_varint64_as_f64(raw, twkb_info.precision));
-                    m = m.map(|v| v + dm);
-                };
-
-                points.push(Point::new_from_opt_vals(x, y, z, m));
+                let (x2, y2, z2, m2) = try!(Self::read_point(raw, twkb_info, x, y, z, m));
+                points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
+                x = x2; y = y2; z = z2; m = m2;
             }
         }
         Ok(LineString {points: points})
+    }
+}
+
+impl TwkbGeom for Polygon {
+    fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
+        // nrings            uvarint
+        // npoints[0]        uvarint
+        // pointarray[0]     varint[]
+        // ...
+        // npoints[n]        uvarint
+        // pointarray[n]     varint[]
+        let mut rings: Vec<LineString> = Vec::new();
+        let nrings = try!(read_raw_varint64(raw));
+        rings.reserve(nrings as usize);
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut z = if twkb_info.has_z { Some(0.0) } else { None };
+        let mut m = if twkb_info.has_m { Some(0.0) } else { None };
+        for _ in 0..nrings {
+            let mut points: Vec<Point> = Vec::new();
+            let npoints = try!(read_raw_varint64(raw));
+            points.reserve(npoints as usize);
+            let (x0, y0, z0, m0) = (x, y, z, m);
+            for _ in 0..npoints {
+                let (x2, y2, z2, m2) = try!(Self::read_point(raw, twkb_info, x, y, z, m));
+                points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
+                x = x2; y = y2; z = z2; m = m2;
+            }
+            // close ring, if necessary
+            if x != x0 && y != y0 && z != z0 && m != m0 {
+                points.push(Point::new_from_opt_vals(x0, y0, z0, m0));
+            }
+            rings.push(LineString {points: points});
+        }
+        Ok(Polygon {rings: rings})
     }
 }
 
@@ -230,7 +284,7 @@ fn hex_to_vec(hexstr: &str) -> Vec<u8> {
 }
 
 #[test]
-fn test_twkb_read() {
+fn test_read_point() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point), "Point { x: 10, y: -20 }");
@@ -254,7 +308,10 @@ fn test_twkb_read() {
     let twkb = hex_to_vec("a10080897aff91f401"); // SELECT encode(ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point), "Point { x: 10, y: -20 }");
+}
 
+#[test]
+fn test_read_line() {
     let twkb = hex_to_vec("02000214271326"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", line), "LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }] }");
@@ -269,12 +326,22 @@ fn test_twkb_read() {
 }
 
 #[test]
-fn test_to_ewkb() {
+fn test_read_polygon() {
+    let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
+    let poly = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", poly), "Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }, LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }");
+}
+
+#[test]
+fn test_write_point() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", point.as_ewkb()), "EwkbPoint");
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000000000000000000244000000000000034C0");
+}
 
+#[test]
+fn test_write_line() {
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", line.as_ewkb()), "$ewkbtype");
