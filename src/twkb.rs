@@ -1,5 +1,5 @@
 use types as postgis;
-use ewkb::{AsEwkbPoint, EwkbPoint, AsEwkbLineString, EwkbLineString};
+use ewkb;
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
@@ -217,9 +217,9 @@ impl TwkbGeom for Point {
     }    
 }
 
-impl<'a> AsEwkbPoint<'a> for Point {
-    fn as_ewkb(&'a self) -> EwkbPoint<'a> {
-        EwkbPoint { geom: self, srid: None, point_type: postgis::PointType::Point }
+impl<'a> ewkb::AsEwkbPoint<'a> for Point {
+    fn as_ewkb(&'a self) -> ewkb::EwkbPoint<'a> {
+        ewkb::EwkbPoint { geom: self, srid: None, point_type: postgis::PointType::Point }
     }
 }
 
@@ -245,6 +245,23 @@ impl TwkbGeom for LineString {
         Ok(LineString {points: points})
     }
 }
+
+impl<'a> postgis::LineString<'a> for LineString {
+    type ItemType = Point;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn points(&'a self) -> Self::Iter {
+        self.points.iter()
+    }
+}
+
+impl<'a> ewkb::AsEwkbLineString<'a> for LineString {
+    type PointType = Point;
+    type Iter = Iter<'a, Point>;
+    fn as_ewkb(&'a self) -> ewkb::EwkbLineString<'a, Self::PointType, Self::Iter> {
+        ewkb::EwkbLineString { geom: self, srid: None, point_type: postgis::PointType::Point }
+    }
+}
+
 
 impl TwkbGeom for Polygon {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -281,6 +298,24 @@ impl TwkbGeom for Polygon {
     }
 }
 
+impl<'a> postgis::Polygon<'a> for Polygon {
+    type ItemType = LineString;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn rings(&'a self) -> Self::Iter {
+        self.rings.iter()
+    }
+}
+
+impl<'a> ewkb::AsEwkbPolygon<'a> for Polygon {
+    type PointType = Point;
+    type PointIter = Iter<'a, Point>;
+    type ItemType = LineString;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn as_ewkb(&'a self) -> ewkb::EwkbPolygon<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
+        ewkb::EwkbPolygon { geom: self, srid: None, point_type: postgis::PointType::Point }
+    }
+}
+
 
 impl TwkbGeom for MultiPoint {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -311,6 +346,23 @@ impl TwkbGeom for MultiPoint {
         Ok(MultiPoint {points: points, ids: ids})
     }
 }
+
+impl<'a> postgis::MultiPoint<'a> for MultiPoint {
+    type ItemType = Point;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn points(&'a self) -> Self::Iter {
+        self.points.iter()
+    }
+}
+
+impl<'a> ewkb::AsEwkbMultiPoint<'a> for MultiPoint {
+    type PointType = Point;
+    type Iter = Iter<'a, Point>;
+    fn as_ewkb(&'a self) -> ewkb::EwkbMultiPoint<'a, Self::PointType, Self::Iter> {
+        ewkb::EwkbMultiPoint { geom: self, srid: None, point_type: postgis::PointType::Point }
+    }
+}
+
 
 impl TwkbGeom for MultiLineString {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -349,6 +401,25 @@ impl TwkbGeom for MultiLineString {
         Ok(MultiLineString {lines: lines, ids: ids})
     }
 }
+
+impl<'a> postgis::MultiLineString<'a> for MultiLineString {
+    type ItemType = LineString;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn lines(&'a self) -> Self::Iter {
+        self.lines.iter()
+    }
+}
+
+impl<'a> ewkb::AsEwkbMultiLineString<'a> for MultiLineString {
+    type PointType = Point;
+    type PointIter = Iter<'a, Point>;
+    type ItemType = LineString;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn as_ewkb(&'a self) -> ewkb::EwkbMultiLineString<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
+        ewkb::EwkbMultiLineString { geom: self, srid: None, point_type: postgis::PointType::Point }
+    }
+}
+
 
 impl TwkbGeom for MultiPolygon {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -401,27 +472,29 @@ impl TwkbGeom for MultiPolygon {
     }
 }
 
-
-impl<'a> AsEwkbLineString<'a> for LineString {
-    type PointType = Point;
-    type Iter = Iter<'a, Point>;
-    fn as_ewkb(&'a self) -> EwkbLineString<'a, Self::PointType, Self::Iter> {
-        EwkbLineString { geom: self, srid: None, point_type: postgis::PointType::Point }
+impl<'a> postgis::MultiPolygon<'a> for MultiPolygon {
+    type ItemType = Polygon;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn polygons(&'a self) -> Self::Iter {
+        self.polygons.iter()
     }
 }
 
-
-impl<'a> postgis::LineString<'a> for LineString {
-    type ItemType = Point;
+impl<'a> ewkb::AsEwkbMultiPolygon<'a> for MultiPolygon {
+    type PointType = Point;
+    type PointIter = Iter<'a, Point>;
+    type LineType = LineString;
+    type LineIter = Iter<'a, Self::LineType>;
+    type ItemType = Polygon;
     type Iter = Iter<'a, Self::ItemType>;
-    fn points(&'a self) -> Self::Iter {
-        self.points.iter()
+    fn as_ewkb(&'a self) -> ewkb::EwkbMultiPolygon<'a, Self::PointType, Self::PointIter, Self::LineType, Self::LineIter, Self::ItemType, Self::Iter> {
+        ewkb::EwkbMultiPolygon { geom: self, srid: None, point_type: postgis::PointType::Point }
     }
 }
 
 
 #[cfg(test)]
-use ewkb::EwkbWrite;
+use ewkb::{EwkbWrite, AsEwkbPoint, AsEwkbLineString, AsEwkbPolygon, AsEwkbMultiPoint, AsEwkbMultiLineString, AsEwkbMultiPolygon};
 
 #[cfg(test)]
 fn hex_to_vec(hexstr: &str) -> Vec<u8> {
@@ -516,4 +589,40 @@ fn test_write_line() {
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", line.as_ewkb()), "$ewkbtype");
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+}
+
+#[test]
+fn test_write_polygon() {
+    let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
+    let polygon = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", polygon.as_ewkb()), "$ewkbtype");
+    assert_eq!(polygon.as_ewkb().to_hex_ewkb(), "010300000002000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000050000000000000000002440000000000000244000000000000000C0000000000000244000000000000000C000000000000000C0000000000000244000000000000000C000000000000024400000000000002440");
+}
+
+#[test]
+fn test_write_multipoint() {
+    let twkb = hex_to_vec("04000214271326"); // SELECT encode(ST_AsTWKB('MULTIPOINT ((10 -20), (0 -0.5))'::geometry), 'hex')
+    let multipoint = MultiPoint::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", multipoint.as_ewkb()), "$ewkbtype");
+    //assert_eq!(multipoint.as_ewkb().to_hex_ewkb(), "0104000000020000000101000000000000000000244000000000000034C001010000000000000000000000000000000000E0BF");
+    // "MULTIPOINT(10 -20,0 -1)"
+    assert_eq!(multipoint.as_ewkb().to_hex_ewkb(), "0104000000020000000101000000000000000000244000000000000034C001010000000000000000000000000000000000F0BF");
+}
+
+#[test]
+fn test_write_multiline() {
+    let twkb = hex_to_vec("05000202142713260200020400"); // SELECT encode(ST_AsTWKB('MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry), 'hex')
+    let multiline = MultiLineString::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", multiline.as_ewkb()), "$ewkbtype");
+    //assert_eq!(multiline.as_ewkb().to_hex_ewkb(), "010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
+    // "MULTILINESTRING((10 -20,0 -1),(0 0,2 0))"
+    assert_eq!(multiline.as_ewkb().to_hex_ewkb(), "010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000F0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
+}
+
+#[test]
+fn test_write_multipoly() {
+    let twkb = hex_to_vec("060002010500000400000403000003010514141700001718000018"); // SELECT encode(ST_AsTWKB('MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry), 'hex')
+    let multipoly = MultiPolygon::read_twkb(&mut twkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", multipoly.as_ewkb()), "$ewkbtype");
+    assert_eq!(multipoly.as_ewkb().to_hex_ewkb(), "010600000002000000010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000010300000001000000050000000000000000002440000000000000244000000000000000C0000000000000244000000000000000C000000000000000C0000000000000244000000000000000C000000000000024400000000000002440");
 }
