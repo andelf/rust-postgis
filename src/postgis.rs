@@ -167,14 +167,42 @@ macro_rules! accepts_bytea {
 impl FromSql for twkb::Point {
     accepts_bytea!();
     fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::Point> {
-        twkb::Point::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
+        twkb::Point::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Point", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
 impl FromSql for twkb::LineString {
     accepts_bytea!();
     fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::LineString> {
-        twkb::LineString::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
+        twkb::LineString::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LineString", ty).into(); postgres::error::Error::Conversion(err)})
+    }
+}
+
+impl FromSql for twkb::Polygon {
+    accepts_bytea!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::Polygon> {
+        twkb::Polygon::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Polygon", ty).into(); postgres::error::Error::Conversion(err)})
+    }
+}
+
+impl FromSql for twkb::MultiPoint {
+    accepts_bytea!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::MultiPoint> {
+        twkb::MultiPoint::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiPoint", ty).into(); postgres::error::Error::Conversion(err)})
+    }
+}
+
+impl FromSql for twkb::MultiLineString {
+    accepts_bytea!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::MultiLineString> {
+        twkb::MultiLineString::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiLineString", ty).into(); postgres::error::Error::Conversion(err)})
+    }
+}
+
+impl FromSql for twkb::MultiPolygon {
+    accepts_bytea!();
+    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::MultiPolygon> {
+        twkb::MultiPolygon::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiPolygon", ty).into(); postgres::error::Error::Conversion(err)})
     }
 }
 
