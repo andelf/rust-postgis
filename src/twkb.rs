@@ -62,7 +62,6 @@ pub struct TwkbInfo {
 
 pub trait TwkbGeom: fmt::Debug + Sized {
     fn read_twkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
-        // https://github.com/TWKB/Specification/blob/master/twkb.md
         let mut twkb_info: TwkbInfo = Default::default();
         // type_and_prec     byte
         // metadata_header   byte
@@ -219,7 +218,7 @@ impl TwkbGeom for Point {
 
 impl<'a> ewkb::AsEwkbPoint<'a> for Point {
     fn as_ewkb(&'a self) -> ewkb::EwkbPoint<'a> {
-        ewkb::EwkbPoint { geom: self, srid: None, point_type: postgis::PointType::Point }
+        ewkb::EwkbPoint { geom: self, srid: None, point_type: ewkb::PointType::Point }
     }
 }
 
@@ -258,7 +257,7 @@ impl<'a> ewkb::AsEwkbLineString<'a> for LineString {
     type PointType = Point;
     type Iter = Iter<'a, Point>;
     fn as_ewkb(&'a self) -> ewkb::EwkbLineString<'a, Self::PointType, Self::Iter> {
-        ewkb::EwkbLineString { geom: self, srid: None, point_type: postgis::PointType::Point }
+        ewkb::EwkbLineString { geom: self, srid: None, point_type: ewkb::PointType::Point }
     }
 }
 
@@ -312,7 +311,7 @@ impl<'a> ewkb::AsEwkbPolygon<'a> for Polygon {
     type ItemType = LineString;
     type Iter = Iter<'a, Self::ItemType>;
     fn as_ewkb(&'a self) -> ewkb::EwkbPolygon<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
-        ewkb::EwkbPolygon { geom: self, srid: None, point_type: postgis::PointType::Point }
+        ewkb::EwkbPolygon { geom: self, srid: None, point_type: ewkb::PointType::Point }
     }
 }
 
@@ -359,7 +358,7 @@ impl<'a> ewkb::AsEwkbMultiPoint<'a> for MultiPoint {
     type PointType = Point;
     type Iter = Iter<'a, Point>;
     fn as_ewkb(&'a self) -> ewkb::EwkbMultiPoint<'a, Self::PointType, Self::Iter> {
-        ewkb::EwkbMultiPoint { geom: self, srid: None, point_type: postgis::PointType::Point }
+        ewkb::EwkbMultiPoint { geom: self, srid: None, point_type: ewkb::PointType::Point }
     }
 }
 
@@ -416,7 +415,7 @@ impl<'a> ewkb::AsEwkbMultiLineString<'a> for MultiLineString {
     type ItemType = LineString;
     type Iter = Iter<'a, Self::ItemType>;
     fn as_ewkb(&'a self) -> ewkb::EwkbMultiLineString<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
-        ewkb::EwkbMultiLineString { geom: self, srid: None, point_type: postgis::PointType::Point }
+        ewkb::EwkbMultiLineString { geom: self, srid: None, point_type: ewkb::PointType::Point }
     }
 }
 
@@ -488,7 +487,7 @@ impl<'a> ewkb::AsEwkbMultiPolygon<'a> for MultiPolygon {
     type ItemType = Polygon;
     type Iter = Iter<'a, Self::ItemType>;
     fn as_ewkb(&'a self) -> ewkb::EwkbMultiPolygon<'a, Self::PointType, Self::PointIter, Self::LineType, Self::LineIter, Self::ItemType, Self::Iter> {
-        ewkb::EwkbMultiPolygon { geom: self, srid: None, point_type: postgis::PointType::Point }
+        ewkb::EwkbMultiPolygon { geom: self, srid: None, point_type: ewkb::PointType::Point }
     }
 }
 

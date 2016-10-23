@@ -4,7 +4,7 @@ extern crate byteorder;
 
 mod error;
 mod types;
-pub use types::{Point, LineString, MultiLineString, Polygon};
+pub use types::{Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon};
 pub mod ewkb;
 pub mod twkb;
 mod postgis;

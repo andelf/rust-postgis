@@ -38,13 +38,3 @@ pub trait MultiPolygon<'a> {
     type Iter: Iterator<Item=&'a Self::ItemType>;
     fn polygons(&'a self) -> Self::Iter;
 }
-
-// --- Adapter structs and traits for EWKB output
-
-#[derive(PartialEq, Clone, Debug)]
-pub enum PointType {
-    Point,
-    PointZ,
-    PointM,
-    PointZM
-}
