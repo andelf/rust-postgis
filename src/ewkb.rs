@@ -780,6 +780,111 @@ pub type MultiPolygonM = MultiPolygonT<PointM>;
 pub type MultiPolygonZM = MultiPolygonT<PointZM>;
 
 
+/// Generic Geometry Data Type
+#[derive(Debug)]
+pub enum GeometryT<P: postgis::Point + EwkbRead> {
+    Point(P),
+    LineString(LineStringT<P>),
+    Polygon(PolygonT<P>),
+    MultiPoint(MultiPointT<P>),
+    MultiLineString(MultiLineStringT<P>),
+    MultiPolygon(MultiPolygonT<P>),
+    GeometryCollection(GeometryCollectionT<P>)
+}
+
+
+impl<P> EwkbRead for GeometryT<P>
+    where P: postgis::Point + EwkbRead
+{
+    fn point_type() -> PointType {
+        P::point_type()
+    }
+    fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
+        let byte_order = try!(raw.read_i8());
+        let is_be = byte_order == 0i8;
+
+        let type_id = try!(read_u32(raw, is_be));
+        let mut srid: Option<i32> = None;
+        if type_id & 0x20000000 == 0x20000000 {
+           srid = Some(try!(read_i32(raw, is_be)));
+        }
+
+        let geom = match type_id & 0xff {
+            0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(raw, is_be, srid).unwrap()),
+            _    => return Err(Error::Read(format!("Error reading generic geometry type - unsupported type id {}.", type_id)))
+        };
+        Ok(geom)
+    }
+    fn read_ewkb_body<R: Read>(_raw: &mut R, _is_be: bool, _srid: Option<i32>) -> Result<Self, Error> {
+        panic!("Not used for generic geometry type")
+    }
+}
+
+pub type Geometry = GeometryT<Point>;
+pub type GeometryZ = GeometryT<PointZ>;
+pub type GeometryM = GeometryT<PointM>;
+pub type GeometryZM = GeometryT<PointZM>;
+
+
+/// GeometryCollection
+#[derive(Debug)]
+pub struct GeometryCollectionT<P: postgis::Point + EwkbRead> {
+    pub geometries: Vec<GeometryT<P>>
+}
+
+impl<P> GeometryCollectionT<P>
+    where P: postgis::Point + EwkbRead
+{
+    pub fn new() -> GeometryCollectionT<P> {
+        GeometryCollectionT { geometries: Vec::new() }
+    }
+}
+
+impl<P> EwkbRead for GeometryCollectionT<P>
+    where P: postgis::Point + EwkbRead
+{
+    fn point_type() -> PointType {
+        P::point_type()
+    }
+    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, _srid: Option<i32>) -> Result<Self, Error> {
+        let mut ret = GeometryCollectionT::new();
+        let size = try!(read_u32(raw, is_be)) as usize;
+        for _ in 0..size {
+            let is_be = try!(raw.read_i8()) == 0i8;
+
+            let type_id = try!(read_u32(raw, is_be));
+            let mut srid: Option<i32> = None;
+            if type_id & 0x20000000 == 0x20000000 {
+               srid = Some(try!(read_i32(raw, is_be)));
+            }
+            let geom = match type_id & 0xff {
+                0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(raw, is_be, srid).unwrap()),
+                _    => return Err(Error::Read(format!("Error reading generic geometry type - unsupported type id {}.", type_id)))
+            };
+            ret.geometries.push(geom);
+        }
+        Ok(ret)
+    }
+}
+
+pub type GeometryCollection = GeometryCollectionT<Point>;
+pub type GeometryCollectionZ = GeometryCollectionT<PointZ>;
+pub type GeometryCollectionM = GeometryCollectionT<PointM>;
+pub type GeometryCollectionZM = GeometryCollectionT<PointZM>;
+
+
 #[test]
 fn test_point_write() {
     // 'POINT (10 -20)'
@@ -943,7 +1048,7 @@ fn test_multipoint_read() {
 }
 
 #[test]
-fn test_multline_read() {
+fn test_multiline_read() {
     let p = |x, y| Point { x: x, y: y, srid: None }; // PostGIS doesn't store SRID for sub-geometries
     // SELECT 'SRID=4326;MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry
     let ewkb = hex_to_vec("0105000020E610000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
@@ -964,6 +1069,46 @@ fn test_multipolygon_read() {
     let line = LineStringT::<Point> {srid: None, points: vec![p(10., 10.), p(-2., 10.), p(-2., -2.), p(10., -2.), p(10., 10.)]};
     let poly2 = PolygonT::<Point> {srid: None, rings: vec![line]};
     assert_eq!(multipoly, MultiPolygonT::<Point> {srid: Some(4326), polygons: vec![poly1, poly2]});
+}
+
+#[test]
+fn test_geometrycollection_read() {
+    // SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry
+    let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
+    let geom = GeometryCollectionT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] }");
+}
+
+#[test]
+fn test_geometry_read() {
+    // SELECT 'POINT(10 -20 100 1)'::geometry
+    let ewkb = hex_to_vec("01010000C0000000000000244000000000000034C00000000000005940000000000000F03F");
+    let geom = GeometryT::<PointZM>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "Point(PointZM { x: 10, y: -20, z: 100, m: 1, srid: None })");
+    // SELECT 'SRID=4326;LINESTRING (10 -20 100, 0 -0.5 101)'::geometry
+    let ewkb = hex_to_vec("01020000A0E610000002000000000000000000244000000000000034C000000000000059400000000000000000000000000000E0BF0000000000405940");
+    let geom = GeometryT::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "LineString(LineStringT { points: [PointZ { x: 10, y: -20, z: 100, srid: Some(4326) }, PointZ { x: 0, y: -0.5, z: 101, srid: Some(4326) }], srid: Some(4326) })");
+    // SELECT 'SRID=4326;POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
+    let ewkb = hex_to_vec("0103000020E610000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000");
+    let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "Polygon(PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: Some(4326) }, Point { x: 2, y: 0, srid: Some(4326) }, Point { x: 2, y: 2, srid: Some(4326) }, Point { x: 0, y: 2, srid: Some(4326) }, Point { x: 0, y: 0, srid: Some(4326) }], srid: Some(4326) }], srid: Some(4326) })");
+    // SELECT 'SRID=4326;MULTIPOINT ((10 -20 100), (0 -0.5 101))'::geometry
+    let ewkb = hex_to_vec("01040000A0E6100000020000000101000080000000000000244000000000000034C0000000000000594001010000800000000000000000000000000000E0BF0000000000405940");
+    let geom = GeometryT::<PointZ>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "MultiPoint(MultiPointT { points: [PointZ { x: 10, y: -20, z: 100, srid: None }, PointZ { x: 0, y: -0.5, z: 101, srid: None }], srid: Some(4326) })");
+    // SELECT 'SRID=4326;MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry
+    let ewkb = hex_to_vec("0105000020E610000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
+    let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "MultiLineString(MultiLineStringT { lines: [LineStringT { points: [Point { x: 10, y: -20, srid: None }, Point { x: 0, y: -0.5, srid: None }], srid: None }, LineStringT { points: [Point { x: 0, y: 0, srid: None }, Point { x: 2, y: 0, srid: None }], srid: None }], srid: Some(4326) })");
+    // SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry
+    let ewkb = hex_to_vec("0106000020E610000002000000010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000010300000001000000050000000000000000002440000000000000244000000000000000C0000000000000244000000000000000C000000000000000C0000000000000244000000000000000C000000000000024400000000000002440");
+    let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "MultiPolygon(MultiPolygonT { polygons: [PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: None }, Point { x: 2, y: 0, srid: None }, Point { x: 2, y: 2, srid: None }, Point { x: 0, y: 2, srid: None }, Point { x: 0, y: 0, srid: None }], srid: None }], srid: None }, PolygonT { rings: [LineStringT { points: [Point { x: 10, y: 10, srid: None }, Point { x: -2, y: 10, srid: None }, Point { x: -2, y: -2, srid: None }, Point { x: 10, y: -2, srid: None }, Point { x: 10, y: 10, srid: None }], srid: None }], srid: None }], srid: Some(4326) })");
+    // SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry
+    let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
+    let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
+    assert_eq!(format!("{:?}", geom), "GeometryCollection(GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] })");
 }
 
 #[test]
