@@ -45,11 +45,18 @@ pub struct PointZM {
     pub srid: Option<i32>,
 }
 
+#[derive(PartialEq, Clone, Debug)]
+pub enum PointType {
+    Point,
+    PointZ,
+    PointM,
+    PointZM
+}
 
 // --- Traits
 
 pub trait EwkbRead: fmt::Debug + Sized {
-    fn point_type() -> postgis::PointType;
+    fn point_type() -> PointType;
 
     fn set_srid(&mut self, _srid: Option<i32>) {
     }
@@ -69,22 +76,23 @@ pub trait EwkbRead: fmt::Debug + Sized {
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error>;
 }
 
+
 pub trait EwkbWrite: fmt::Debug + Sized {
     fn opt_srid(&self) -> Option<i32> {
         None
     }
 
-    fn wkb_type_id(point_type: &postgis::PointType, srid: Option<i32>) -> u32 {
+    fn wkb_type_id(point_type: &PointType, srid: Option<i32>) -> u32 {
         let mut type_ = 0;
         if srid.is_some() {
             type_ |= 0x20000000;
         }
-        if *point_type == postgis::PointType::PointZ ||
-           *point_type == postgis::PointType::PointZM {
+        if *point_type == PointType::PointZ ||
+           *point_type == PointType::PointZM {
             type_ |= 0x80000000;
         }
-        if *point_type == postgis::PointType::PointM ||
-           *point_type == postgis::PointType::PointZM {
+        if *point_type == PointType::PointM ||
+           *point_type == PointType::PointZM {
             type_ |= 0x40000000;
         }
         type_
@@ -227,8 +235,8 @@ impl postgis::Point for PointZM {
 macro_rules! impl_point_read_traits {
     ($ptype:ident) => (
         impl EwkbRead for $ptype {
-            fn point_type() -> postgis::PointType {
-                postgis::PointType::$ptype
+            fn point_type() -> PointType {
+                PointType::$ptype
             }
             fn set_srid(&mut self, srid: Option<i32>) {
                 self.srid = srid;
@@ -252,7 +260,7 @@ macro_rules! impl_point_read_traits {
 
         impl<'a> AsEwkbPoint<'a> for $ptype {
             fn as_ewkb(&'a self) -> EwkbPoint<'a> {
-                EwkbPoint { geom: self, srid: self.srid, point_type: postgis::PointType::$ptype }
+                EwkbPoint { geom: self, srid: self.srid, point_type: PointType::$ptype }
             }
         }
     )
@@ -267,7 +275,7 @@ impl_point_read_traits!(PointZM);
 pub struct EwkbPoint<'a> {
     pub geom: &'a postgis::Point,
     pub srid: Option<i32>,
-    pub point_type: postgis::PointType,
+    pub point_type: PointType,
 }
 
 pub trait AsEwkbPoint<'a> {
@@ -314,7 +322,7 @@ impl EwkbWrite for Point {
 
 
 macro_rules! point_container_type {
-    // points container
+    // geometries containing points
     ($geotypetrait:ident for $geotype:ident) => (
 
         #[derive(PartialEq, Clone, Debug)]
@@ -358,7 +366,7 @@ macro_rules! point_container_type {
 }
 
 macro_rules! geometry_container_type {
-    // line and polygon containers
+    // geometries containing lines and polygons
     ($geotypetrait:ident for $geotype:ident contains $itemtype:ident named $itemname:ident) => (
         #[derive(PartialEq, Clone, Debug)]
         pub struct $geotype<P: postgis::Point + EwkbRead> {
@@ -408,7 +416,7 @@ macro_rules! impl_read_for_point_container_type {
         impl<P> EwkbRead for $geotype<P>
             where P: postgis::Point + EwkbRead
         {
-            fn point_type() -> postgis::PointType {
+            fn point_type() -> PointType {
                 P::point_type()
             }
             fn set_srid(&mut self, srid: Option<i32>) {
@@ -429,7 +437,7 @@ macro_rules! impl_read_for_point_container_type {
         impl<P> EwkbRead for $geotype<P>
             where P: postgis::Point + EwkbRead
         {
-            fn point_type() -> postgis::PointType {
+            fn point_type() -> PointType {
                 P::point_type()
             }
             fn set_srid(&mut self, srid: Option<i32>) {
@@ -452,7 +460,7 @@ macro_rules! impl_read_for_geometry_container_type {
         impl<P> EwkbRead for $geotype<P>
             where P: postgis::Point + EwkbRead
         {
-            fn point_type() -> postgis::PointType {
+            fn point_type() -> PointType {
                 P::point_type()
             }
             fn set_srid(&mut self, srid: Option<i32>) {
@@ -472,7 +480,7 @@ macro_rules! impl_read_for_geometry_container_type {
         impl<P> EwkbRead for $geotype<P>
             where P: postgis::Point + EwkbRead
         {
-            fn point_type() -> postgis::PointType {
+            fn point_type() -> PointType {
                 P::point_type()
             }
             fn set_srid(&mut self, srid: Option<i32>) {
@@ -499,7 +507,7 @@ macro_rules! point_container_write {
         {
             pub geom: &'a postgis::$geotypetrait<'a, ItemType=P, Iter=I>,
             pub srid: Option<i32>,
-            pub point_type: postgis::PointType,
+            pub point_type: PointType,
         }
 
         pub trait $asewkbtype<'a> {
@@ -563,7 +571,7 @@ macro_rules! geometry_container_write {
         {
             pub geom: &'a postgis::$geotypetrait<'a, ItemType=T, Iter=J>,
             pub srid: Option<i32>,
-            pub point_type: postgis::PointType,
+            pub point_type: PointType,
         }
 
         pub trait $asewkbtype<'a> {
@@ -633,7 +641,7 @@ macro_rules! geometry_container_write {
         {
             pub geom: &'a postgis::$geotypetrait<'a, ItemType=T, Iter=J>,
             pub srid: Option<i32>,
-            pub point_type: postgis::PointType,
+            pub point_type: PointType,
         }
 
         pub trait $asewkbtype<'a> {
@@ -855,7 +863,7 @@ fn test_multipolygon_write() {
 #[test]
 fn test_ewkb_adapters() {
     let point = Point { x: 10.0, y: -20.0, srid: Some(4326) };
-    let ewkb = EwkbPoint { geom: &point, srid: Some(4326), point_type: postgis::PointType::Point };
+    let ewkb = EwkbPoint { geom: &point, srid: Some(4326), point_type: PointType::Point };
     assert_eq!(ewkb.to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
     assert_eq!(point.as_ewkb().to_hex_ewkb(), "0101000020E6100000000000000000244000000000000034C0");
 }
