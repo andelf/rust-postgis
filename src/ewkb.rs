@@ -1,3 +1,7 @@
+//
+// Copyright (c) ShuYu Wang <andelf@gmail.com>, Feather Workshop and Pirmin Kalberer. All rights reserved.
+//
+
 use types as postgis;
 use std::io::prelude::*;
 use std::mem;

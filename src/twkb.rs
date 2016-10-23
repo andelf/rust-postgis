@@ -1,3 +1,7 @@
+//
+// Copyright (c) Pirmin Kalberer. All rights reserved.
+//
+
 use types as postgis;
 use ewkb;
 use std::io::prelude::*;

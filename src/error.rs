@@ -1,3 +1,10 @@
+//  FileName    : error.rs
+//  Author      : ShuYu Wang <andelf@gmail.com>
+//  Created     : Wed May 27 01:45:41 2015 by ShuYu Wang
+//  Copyright   : Feather Workshop (c) 2015
+//  Description : PostGIS helper
+//  Time-stamp: <2015-06-13 19:21:08 andelf>
+
 use std;
 use std::fmt;
 

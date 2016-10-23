@@ -1,3 +1,7 @@
+//
+// Copyright (c) Pirmin Kalberer. All rights reserved.
+//
+
 pub trait Point {
     fn x(&self) -> f64;
     fn y(&self) -> f64;
