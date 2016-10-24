@@ -156,10 +156,13 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
 // --- Point
 
 impl Point {
-    fn has_z() -> bool { false }
-    fn has_m() -> bool { false }
-    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>, srid: Option<i32>) -> Self {
+    pub fn has_z() -> bool { false }
+    pub fn has_m() -> bool { false }
+    pub fn new(x: f64, y: f64, srid: Option<i32>) -> Self {
         Point { x: x, y: y, srid: srid }
+    }
+    pub fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>, srid: Option<i32>) -> Self {
+        Self::new(x, y, srid)
     }
 }
 
@@ -173,10 +176,13 @@ impl postgis::Point for Point {
 }
 
 impl PointZ {
-    fn has_z() -> bool { true }
-    fn has_m() -> bool { false }
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, _m: Option<f64>, srid: Option<i32>) -> Self {
-        PointZ { x: x, y: y, z: z.unwrap(), srid: srid }
+    pub fn has_z() -> bool { true }
+    pub fn has_m() -> bool { false }
+    pub fn new(x: f64, y: f64, z: f64, srid: Option<i32>) -> Self {
+        PointZ { x: x, y: y, z: z, srid: srid }
+    }
+    pub fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, _m: Option<f64>, srid: Option<i32>) -> Self {
+        Self::new(x, y, z.unwrap(), srid)
     }
 }
 
@@ -193,12 +199,15 @@ impl postgis::Point for PointZ {
 }
 
 impl PointM {
-    fn has_z() -> bool { false }
-    fn has_m() -> bool { true }
-    fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, m: Option<f64>, srid: Option<i32>) -> Self {
-        PointM { x: x, y: y, m: m.unwrap(), srid: srid }
+    pub fn has_z() -> bool { false }
+    pub fn has_m() -> bool { true }
+    pub fn new(x: f64, y: f64, m: f64, srid: Option<i32>) -> Self {
+        PointM { x: x, y: y, m: m, srid: srid }
     }
-}
+    pub fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, m: Option<f64>, srid: Option<i32>) -> Self {
+        Self::new(x, y, m.unwrap(), srid)
+    }
+ }
 
 impl postgis::Point for PointM {
     fn x(&self) -> f64 {
@@ -213,10 +222,13 @@ impl postgis::Point for PointM {
 }
 
 impl PointZM {
-    fn has_z() -> bool { true }
-    fn has_m() -> bool { true }
-    fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>, srid: Option<i32>) -> Self {
-        PointZM { x: x, y: y, z: z.unwrap(), m: m.unwrap(), srid: srid }
+    pub fn has_z() -> bool { true }
+    pub fn has_m() -> bool { true }
+    pub fn new(x: f64, y: f64, z: f64, m: f64, srid: Option<i32>) -> Self {
+        PointZM { x: x, y: y, z: z, m: m, srid: srid }
+    }
+    pub fn new_from_opt_vals(x: f64, y: f64, z: Option<f64>, m: Option<f64>, srid: Option<i32>) -> Self {
+        Self::new(x, y, z.unwrap(), m.unwrap(), srid)
     }
 }
 
