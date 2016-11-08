@@ -11,5 +11,5 @@ keywords = ["PostgreSQL", "PostGIS", "GIS", "GEO"]
 license = "MIT"
 
 [dependencies]
-postgres = "^0.13"
+postgres = "^0.12"
 byteorder = "^0.5"
