@@ -3,12 +3,13 @@
 //
 
 use types as postgis;
+use std;
 use std::io::prelude::*;
 use std::mem;
 use std::fmt;
 use std::slice::Iter;
 use std::iter::FromIterator;
-use byteorder::{self,ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
+use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use error::Error;
 
 // OGC WKB specification: http://www.opengeospatial.org/standards/sfa
@@ -125,8 +126,8 @@ pub trait EwkbWrite: fmt::Debug + Sized {
 
 // --- helpers
 
-impl From<byteorder::Error> for Error {
-    fn from(e: byteorder::Error) -> Error {
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Error {
         Error::Read(format!("error while reading: {:?}", e))
     }
 }

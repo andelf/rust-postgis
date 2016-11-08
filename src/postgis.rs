@@ -5,19 +5,9 @@
 use types::{Point, LineString, Polygon};
 use ewkb::{self, EwkbRead, EwkbWrite, AsEwkbPoint, AsEwkbLineString, AsEwkbPolygon, AsEwkbMultiPoint, AsEwkbMultiLineString, AsEwkbMultiPolygon};
 use twkb::{self, TwkbGeom};
-use std;
-use std::io::prelude::*;
-use postgres;
+use std::io::Cursor;
 use postgres::types::{Type, IsNull, ToSql, FromSql, SessionInfo};
-use error::Error;
-use std::convert::From;
-
-
-impl From<Error> for postgres::error::Error {
-    fn from(e: Error) -> postgres::error::Error {
-        postgres::error::Error::Conversion(Box::new(e))
-    }
-}
+use std::error::Error;
 
 
 macro_rules! accepts_geography {
@@ -36,7 +26,7 @@ macro_rules! accepts_geography {
 impl<'a> ToSql for ewkb::EwkbPoint<'a> {
     to_sql_checked!();
     accepts_geography!();
-    fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+    fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
         try!(self.write_ewkb(out));
         Ok(IsNull::No)
     }
@@ -46,15 +36,16 @@ macro_rules! impl_sql_for_point_type {
     ($ptype:ident) => (
         impl FromSql for ewkb::$ptype {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::$ptype> {
-                ewkb::$ptype::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to POINT", ty).into(); postgres::error::Error::Conversion(err)})
+            fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+                let mut rdr = Cursor::new(raw);
+                ewkb::$ptype::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to POINT", ty).into())
             }
         }
 
         impl ToSql for ewkb::$ptype {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+            fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
                 try!(self.as_ewkb().write_ewkb(out));
                 Ok(IsNull::No)
             }
@@ -74,8 +65,9 @@ macro_rules! impl_sql_for_geom_type {
             where T: 'a + Point + EwkbRead
         {
             accepts_geography!();
-            fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::$geotype<T>> {
-                ewkb::$geotype::<T>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LINESTRING", ty).into(); postgres::error::Error::Conversion(err)})
+            fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+                let mut rdr = Cursor::new(raw);
+                ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to LINESTRING", ty).into())
             }
         }
 
@@ -84,7 +76,7 @@ macro_rules! impl_sql_for_geom_type {
         {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+            fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
                 try!(self.as_ewkb().write_ewkb(out));
                 Ok(IsNull::No)
             }
@@ -107,7 +99,7 @@ macro_rules! impl_sql_for_ewkb_type {
         {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+            fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
                 try!(self.write_ewkb(out));
                 Ok(IsNull::No)
             }
@@ -122,7 +114,7 @@ macro_rules! impl_sql_for_ewkb_type {
         {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+            fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
                 try!(self.write_ewkb(out));
                 Ok(IsNull::No)
             }
@@ -139,7 +131,7 @@ macro_rules! impl_sql_for_ewkb_type {
         {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql<W: Write+?Sized>(&self, _: &Type, out: &mut W, _ctx: &SessionInfo) -> postgres::Result<IsNull> {
+            fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
                 try!(self.write_ewkb(out));
                 Ok(IsNull::No)
             }
@@ -158,8 +150,9 @@ impl<P> FromSql for ewkb::GeometryT<P>
     where P: Point + EwkbRead
 {
     accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::GeometryT<P>> {
-        ewkb::GeometryT::<P>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiPoint", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        ewkb::GeometryT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
     }
 }
 
@@ -167,8 +160,9 @@ impl<P> FromSql for ewkb::GeometryCollectionT<P>
     where P: Point + EwkbRead
 {
     accepts_geography!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<ewkb::GeometryCollectionT<P>> {
-        ewkb::GeometryCollectionT::<P>::read_ewkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiPoint", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        ewkb::GeometryCollectionT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
     }
 }
 
@@ -189,43 +183,49 @@ macro_rules! accepts_bytea {
 
 impl FromSql for twkb::Point {
     accepts_bytea!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::Point> {
-        twkb::Point::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Point", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        twkb::Point::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to Point", ty).into())
     }
 }
 
 impl FromSql for twkb::LineString {
     accepts_bytea!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::LineString> {
-        twkb::LineString::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to LineString", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        twkb::LineString::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to LineString", ty).into())
     }
 }
 
 impl FromSql for twkb::Polygon {
     accepts_bytea!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::Polygon> {
-        twkb::Polygon::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to Polygon", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        twkb::Polygon::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to Polygon", ty).into())
     }
 }
 
 impl FromSql for twkb::MultiPoint {
     accepts_bytea!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::MultiPoint> {
-        twkb::MultiPoint::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiPoint", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        twkb::MultiPoint::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
     }
 }
 
 impl FromSql for twkb::MultiLineString {
     accepts_bytea!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::MultiLineString> {
-        twkb::MultiLineString::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiLineString", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        twkb::MultiLineString::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiLineString", ty).into())
     }
 }
 
 impl FromSql for twkb::MultiPolygon {
     accepts_bytea!();
-    fn from_sql<R: Read>(ty: &Type, raw: &mut R, _ctx: &SessionInfo) -> postgres::Result<twkb::MultiPolygon> {
-        twkb::MultiPolygon::read_twkb(raw).map_err(|_| {let err: Box<std::error::Error + Sync + Send> = format!("cannot convert {} to MultiPolygon", ty).into(); postgres::error::Error::Conversion(err)})
+    fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
+        let mut rdr = Cursor::new(raw);
+        twkb::MultiPolygon::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPolygon", ty).into())
     }
 }
 
@@ -251,7 +251,7 @@ mod tests {
 
     fn connect() -> Connection {
         match env::var("DBCONN") {
-            Result::Ok(val) => Connection::connect(&val as &str, postgres::SslMode::None),
+            Result::Ok(val) => Connection::connect(&val as &str, postgres::TlsMode::None),
             Result::Err(err) => { panic!("{:#?}", err) }
         }.unwrap()
     }
@@ -543,7 +543,7 @@ mod tests {
     #[ignore]
     #[allow(unused_imports,unused_variables)]
     fn test_examples() {
-        use postgres::{Connection, SslMode};
+        use postgres::{Connection, TlsMode};
         //use postgis::ewkb;
         //use postgis::LineString;
 
