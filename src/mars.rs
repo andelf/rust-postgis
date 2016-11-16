@@ -5,6 +5,7 @@
 //  Description : WGS84 GCJ02 conversion for rust
 //  Time-stamp: <2015-06-01 10:45:55 andelf>
 
+use ewkb;
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
 struct Converter {
@@ -127,12 +128,12 @@ impl Converter {
 fn wgtochina_lb(wg_flag: i32, wg_lng: i32, wg_lat: i32, wg_heit: i32, _wg_week: i32, wg_time: i32) -> (f64, f64) {
     let mut point: (f64, f64) = (wg_lng as f64, wg_lat as f64);
 
-    let mut x1_x2: f64;
-    let mut y1_y2: f64;
-    let mut casm_v: f64;
+    let x1_x2: f64;
+    let y1_y2: f64;
+    let casm_v: f64;
     let mut x_add: f64;
     let mut y_add: f64;
-    let mut h_add: f64;
+    let h_add: f64;
 
     if wg_heit > 5000 {
         return point;
@@ -299,6 +300,20 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
     }
 
     bisection_find_vals(x, y, x - 0.1, y - 0.1, x + 0.1, y + 0.1, epsilon)
+}
+
+
+impl ewkb::Point {
+    pub fn new_wgs84(x: f64, y: f64) -> ewkb::Point {
+        ewkb::Point {x: x, y: y, srid: Some(4326)}
+    }
+    pub fn from_gcj02(x: f64, y: f64) -> ewkb::Point {
+        let (x0, y0) = to_wgs84(x, y);
+        ewkb::Point {x: x0, y: y0, srid: Some(4326)}
+    }
+    pub fn to_gcj02(&self) -> (f64, f64) {
+        from_wgs84(self.x, self.y)
+    }
 }
 
 
