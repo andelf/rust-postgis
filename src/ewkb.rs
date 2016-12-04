@@ -62,9 +62,6 @@ pub enum PointType {
 pub trait EwkbRead: fmt::Debug + Sized {
     fn point_type() -> PointType;
 
-    fn set_srid(&mut self, _srid: Option<i32>) {
-    }
-
     fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
         let byte_order = raw.read_i8()?;
         let is_be = byte_order == 0i8;
@@ -256,9 +253,6 @@ macro_rules! impl_point_read_traits {
             fn point_type() -> PointType {
                 PointType::$ptype
             }
-            fn set_srid(&mut self, srid: Option<i32>) {
-                self.srid = srid;
-            }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let x = read_f64(raw, is_be)?;
                 let y = read_f64(raw, is_be)?;
@@ -422,9 +416,6 @@ macro_rules! impl_read_for_point_container_type {
             fn point_type() -> PointType {
                 P::point_type()
             }
-            fn set_srid(&mut self, srid: Option<i32>) {
-                self.srid = srid;
-            }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut points: Vec<P> = vec![];
                 let size = read_u32(raw, is_be)? as usize;
@@ -442,9 +433,6 @@ macro_rules! impl_read_for_point_container_type {
         {
             fn point_type() -> PointType {
                 P::point_type()
-            }
-            fn set_srid(&mut self, srid: Option<i32>) {
-                self.srid = srid;
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut points: Vec<P> = vec![];
@@ -466,9 +454,6 @@ macro_rules! impl_read_for_geometry_container_type {
             fn point_type() -> PointType {
                 P::point_type()
             }
-            fn set_srid(&mut self, srid: Option<i32>) {
-                self.srid = srid;
-            }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
                 let size = read_u32(raw, is_be)? as usize;
@@ -485,9 +470,6 @@ macro_rules! impl_read_for_geometry_container_type {
         {
             fn point_type() -> PointType {
                 P::point_type()
-            }
-            fn set_srid(&mut self, srid: Option<i32>) {
-                self.srid = srid;
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
