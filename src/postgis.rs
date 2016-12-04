@@ -27,7 +27,7 @@ impl<'a> ToSql for ewkb::EwkbPoint<'a> {
     to_sql_checked!();
     accepts_geography!();
     fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
-        try!(self.write_ewkb(out));
+        self.write_ewkb(out)?;
         Ok(IsNull::No)
     }
 }
@@ -46,7 +46,7 @@ macro_rules! impl_sql_for_point_type {
             to_sql_checked!();
             accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
-                try!(self.as_ewkb().write_ewkb(out));
+                self.as_ewkb().write_ewkb(out)?;
                 Ok(IsNull::No)
             }
         }
@@ -77,7 +77,7 @@ macro_rules! impl_sql_for_geom_type {
             to_sql_checked!();
             accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
-                try!(self.as_ewkb().write_ewkb(out));
+                self.as_ewkb().write_ewkb(out)?;
                 Ok(IsNull::No)
             }
         }
@@ -100,7 +100,7 @@ macro_rules! impl_sql_for_ewkb_type {
             to_sql_checked!();
             accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
-                try!(self.write_ewkb(out));
+                self.write_ewkb(out)?;
                 Ok(IsNull::No)
             }
         }
@@ -115,7 +115,7 @@ macro_rules! impl_sql_for_ewkb_type {
             to_sql_checked!();
             accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
-                try!(self.write_ewkb(out));
+                self.write_ewkb(out)?;
                 Ok(IsNull::No)
             }
         }
@@ -132,7 +132,7 @@ macro_rules! impl_sql_for_ewkb_type {
             to_sql_checked!();
             accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>, _ctx: &SessionInfo) -> Result<IsNull, Box<Error + Sync + Send>> {
-                try!(self.write_ewkb(out));
+                self.write_ewkb(out)?;
                 Ok(IsNull::No)
             }
         }

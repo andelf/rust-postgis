@@ -72,37 +72,37 @@ pub trait TwkbGeom: fmt::Debug + Sized {
         // [extended_dims]   byte
         // [size]            uvarint
         // [bounds]          bbox
-        let type_and_prec = try!(raw.read_u8());
+        let type_and_prec = raw.read_u8()?;
         twkb_info.geom_type = type_and_prec & 0x0F;
         twkb_info.precision = decode_zig_zag_64(((type_and_prec & 0xF0) >> 4) as u64) as i8;
-        let metadata_header = try!(raw.read_u8());
+        let metadata_header = raw.read_u8()?;
         let has_bbox = (metadata_header & 0b0001) != 0;
         let has_size_attribute = (metadata_header & 0b0010) != 0;
         twkb_info.has_idlist = (metadata_header & 0b0100) != 0;
         let has_ext_prec_info = (metadata_header & 0b1000) != 0;
         twkb_info.is_empty_geom = (metadata_header & 0b10000) != 0;
         if has_ext_prec_info {
-            let ext_prec_info = try!(raw.read_u8());
+            let ext_prec_info = raw.read_u8()?;
             twkb_info.has_z = ext_prec_info & 0b0001 != 0;
             twkb_info.has_m = ext_prec_info & 0b0010 != 0;
             twkb_info.prec_z = Some((ext_prec_info & 0x1C) >> 2);
             twkb_info.prec_m = Some((ext_prec_info & 0xE0) >> 5);
         }
         if has_size_attribute {
-            twkb_info.size = Some(try!(read_raw_varint64(raw)));
+            twkb_info.size = Some(read_raw_varint64(raw)?);
         }
         if has_bbox {
-            let _xmin = try!(read_int64(raw));
-            let _deltax = try!(read_int64(raw));
-            let _ymin = try!(read_int64(raw));
-            let _deltay = try!(read_int64(raw));
+            let _xmin = read_int64(raw)?;
+            let _deltax = read_int64(raw)?;
+            let _ymin = read_int64(raw)?;
+            let _deltay = read_int64(raw)?;
             if twkb_info.has_z {
-                let _zmin = try!(read_int64(raw));
-                let _deltaz = try!(read_int64(raw));
+                let _zmin = read_int64(raw)?;
+                let _deltaz = read_int64(raw)?;
             }
             if twkb_info.has_m {
-                let _mmin = try!(read_int64(raw));
-                let _deltam = try!(read_int64(raw));
+                let _mmin = read_int64(raw)?;
+                let _deltam = read_int64(raw)?;
             }
         }
         Self::read_twkb_body(raw, &twkb_info)
@@ -113,16 +113,16 @@ pub trait TwkbGeom: fmt::Debug + Sized {
     fn read_relative_point<R: Read>(raw: &mut R, twkb_info: &TwkbInfo, x: f64, y: f64, z: Option<f64>, m: Option<f64>)
         -> Result<(f64, f64, Option<f64>, Option<f64>), Error>
     {
-        let x2 = x + try!(read_varint64_as_f64(raw, twkb_info.precision));
-        let y2 = y + try!(read_varint64_as_f64(raw, twkb_info.precision));
+        let x2 = x + read_varint64_as_f64(raw, twkb_info.precision)?;
+        let y2 = y + read_varint64_as_f64(raw, twkb_info.precision)?;
         let z2 = if twkb_info.has_z {
-            let dz = try!(read_varint64_as_f64(raw, twkb_info.precision));
+            let dz = read_varint64_as_f64(raw, twkb_info.precision)?;
             z.map(|v| v + dz)
         } else {
             None
         };
         let m2 = if twkb_info.has_m {
-            let dm = try!(read_varint64_as_f64(raw, twkb_info.precision));
+            let dm = read_varint64_as_f64(raw, twkb_info.precision)?;
             m.map(|v| v + dm)
         } else {
             None
@@ -135,7 +135,7 @@ pub trait TwkbGeom: fmt::Debug + Sized {
         let mut idlist = Vec::new();
         idlist.reserve(size);
         for _ in 0..size {
-            let id = try!(read_raw_varint64(raw));
+            let id = read_raw_varint64(raw)?;
             idlist.push(id);
         }
         Ok(idlist)
@@ -152,7 +152,7 @@ fn read_raw_varint64<R: Read>(raw: &mut R) -> Result<u64, Error> {
         if i == 10 {
             return Err(Error::Read("invalid varint".into()));
         }
-        let b = try!(raw.read_u8());
+        let b = raw.read_u8()?;
         // TODO: may overflow if i == 9
         r = r | (((b & 0x7f) as u64) << (i * 7));
         i += 1;
@@ -204,15 +204,15 @@ impl TwkbGeom for Point {
         if twkb_info.is_empty_geom {
             return Ok(Point::new_from_opt_vals(f64::NAN, f64::NAN, None, None));
         }
-        let x = try!(read_varint64_as_f64(raw, twkb_info.precision));
-        let y = try!(read_varint64_as_f64(raw, twkb_info.precision));
+        let x = read_varint64_as_f64(raw, twkb_info.precision)?;
+        let y = read_varint64_as_f64(raw, twkb_info.precision)?;
         let z = if twkb_info.has_z {
-            Some(try!(read_varint64_as_f64(raw, twkb_info.precision)))
+            Some(read_varint64_as_f64(raw, twkb_info.precision)?)
         } else {
             None
         };
         let m = if twkb_info.has_m {
-            Some(try!(read_varint64_as_f64(raw, twkb_info.precision)))
+            Some(read_varint64_as_f64(raw, twkb_info.precision)?)
         } else {
             None
         };
@@ -233,14 +233,14 @@ impl TwkbGeom for LineString {
         // pointarray        varint[]
         let mut points: Vec<Point> = Vec::new();
         if !twkb_info.is_empty_geom {
-            let npoints = try!(read_raw_varint64(raw));
+            let npoints = read_raw_varint64(raw)?;
             points.reserve(npoints as usize);
             let mut x = 0.0;
             let mut y = 0.0;
             let mut z = if twkb_info.has_z { Some(0.0) } else { None };
             let mut m = if twkb_info.has_m { Some(0.0) } else { None };
             for _ in 0..npoints {
-                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                 x = x2; y = y2; z = z2; m = m2;
             }
@@ -275,7 +275,7 @@ impl TwkbGeom for Polygon {
         // npoints[n]        uvarint
         // pointarray[n]     varint[]
         let mut rings: Vec<LineString> = Vec::new();
-        let nrings = try!(read_raw_varint64(raw));
+        let nrings = read_raw_varint64(raw)?;
         rings.reserve(nrings as usize);
         let mut x = 0.0;
         let mut y = 0.0;
@@ -283,11 +283,11 @@ impl TwkbGeom for Polygon {
         let mut m = if twkb_info.has_m { Some(0.0) } else { None };
         for _ in 0..nrings {
             let mut points: Vec<Point> = Vec::new();
-            let npoints = try!(read_raw_varint64(raw));
+            let npoints = read_raw_varint64(raw)?;
             points.reserve(npoints as usize);
             let (x0, y0, z0, m0) = (x, y, z, m);
             for _ in 0..npoints {
-                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                 x = x2; y = y2; z = z2; m = m2;
             }
@@ -328,11 +328,11 @@ impl TwkbGeom for MultiPoint {
         let mut points: Vec<Point> = Vec::new();
         let mut ids: Option<Vec<u64>> = None;
         if !twkb_info.is_empty_geom {
-            let npoints = try!(read_raw_varint64(raw));
+            let npoints = read_raw_varint64(raw)?;
             points.reserve(npoints as usize);
 
             if twkb_info.has_idlist {
-                let idlist = try!(Self::read_idlist(raw, npoints as usize));
+                let idlist = Self::read_idlist(raw, npoints as usize)?;
                 ids = Some(idlist);
             }
 
@@ -341,7 +341,7 @@ impl TwkbGeom for MultiPoint {
             let mut z = if twkb_info.has_z { Some(0.0) } else { None };
             let mut m = if twkb_info.has_m { Some(0.0) } else { None };
             for _ in 0..npoints {
-                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                 x = x2; y = y2; z = z2; m = m2;
             }
@@ -378,11 +378,11 @@ impl TwkbGeom for MultiLineString {
         // pointarray[n]     varint[]
         let mut lines: Vec<LineString> = Vec::new();
         let mut ids: Option<Vec<u64>> = None;
-        let nlines = try!(read_raw_varint64(raw));
+        let nlines = read_raw_varint64(raw)?;
         lines.reserve(nlines as usize);
 
         if twkb_info.has_idlist {
-            let idlist = try!(Self::read_idlist(raw, nlines as usize));
+            let idlist = Self::read_idlist(raw, nlines as usize)?;
             ids = Some(idlist);
         }
 
@@ -392,10 +392,10 @@ impl TwkbGeom for MultiLineString {
         let mut m = if twkb_info.has_m { Some(0.0) } else { None };
         for _ in 0..nlines {
             let mut points: Vec<Point> = Vec::new();
-            let npoints = try!(read_raw_varint64(raw));
+            let npoints = read_raw_varint64(raw)?;
             points.reserve(npoints as usize);
             for _ in 0..npoints {
-                let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                 x = x2; y = y2; z = z2; m = m2;
             }
@@ -437,11 +437,11 @@ impl TwkbGeom for MultiPolygon {
         // pointarray[n][m]  varint[]
         let mut polygons: Vec<Polygon> = Vec::new();
         let mut ids: Option<Vec<u64>> = None;
-        let npolygons = try!(read_raw_varint64(raw));
+        let npolygons = read_raw_varint64(raw)?;
         polygons.reserve(npolygons as usize);
 
         if twkb_info.has_idlist {
-            let idlist = try!(Self::read_idlist(raw, npolygons as usize));
+            let idlist = Self::read_idlist(raw, npolygons as usize)?;
             ids = Some(idlist);
         }
 
@@ -451,15 +451,15 @@ impl TwkbGeom for MultiPolygon {
         let mut m = if twkb_info.has_m { Some(0.0) } else { None };
         for _ in 0..npolygons {
             let mut rings: Vec<LineString> = Vec::new();
-            let nrings = try!(read_raw_varint64(raw));
+            let nrings = read_raw_varint64(raw)?;
             rings.reserve(nrings as usize);
             for _ in 0..nrings {
                 let mut points: Vec<Point> = Vec::new();
-                let npoints = try!(read_raw_varint64(raw));
+                let npoints = read_raw_varint64(raw)?;
                 points.reserve(npoints as usize);
                 let (x0, y0, z0, m0) = (x, y, z, m);
                 for _ in 0..npoints {
-                    let (x2, y2, z2, m2) = try!(Self::read_relative_point(raw, twkb_info, x, y, z, m));
+                    let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                     points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
                     x = x2; y = y2; z = z2; m = m2;
                 }

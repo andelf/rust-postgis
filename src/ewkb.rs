@@ -67,13 +67,13 @@ pub trait EwkbRead: fmt::Debug + Sized {
     }
 
     fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
-        let byte_order = try!(raw.read_i8());
+        let byte_order = raw.read_i8()?;
         let is_be = byte_order == 0i8;
 
-        let type_id = try!(read_u32(raw, is_be));
+        let type_id = read_u32(raw, is_be)?;
         let mut srid: Option<i32> = None;
         if type_id & 0x20000000 == 0x20000000 {
-           srid = Some(try!(read_i32(raw, is_be)));
+           srid = Some(read_i32(raw, is_be)?);
         }
         Self::read_ewkb_body(raw, is_be, srid)
     }
@@ -107,11 +107,11 @@ pub trait EwkbWrite: fmt::Debug + Sized {
 
     fn write_ewkb<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         // use LE
-        try!(w.write_u8(0x01));
+        w.write_u8(0x01)?;
         let type_id = self.type_id();
-        try!(w.write_u32::<LittleEndian>(type_id));
+        w.write_u32::<LittleEndian>(type_id)?;
         self.opt_srid().map(|srid| w.write_i32::<LittleEndian>(srid));
-        try!(self.write_ewkb_body(w));
+        self.write_ewkb_body(w)?;
         Ok(())
     }
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error>;
@@ -259,15 +259,15 @@ macro_rules! impl_point_read_traits {
                 self.srid = srid;
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
-                let x = try!(read_f64(raw, is_be));
-                let y = try!(read_f64(raw, is_be));
+                let x = read_f64(raw, is_be)?;
+                let y = read_f64(raw, is_be)?;
                 let z = if Self::has_z() {
-                    Some(try!(read_f64(raw, is_be)))
+                    Some(read_f64(raw, is_be)?)
                 } else {
                     None
                 };
                 let m = if Self::has_m() {
-                    Some(try!(read_f64(raw, is_be)))
+                    Some(read_f64(raw, is_be)?)
                 } else {
                     None
                 };
@@ -301,7 +301,7 @@ pub trait AsEwkbPoint<'a> {
 
 impl<'a> fmt::Debug for EwkbPoint<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "EwkbPoint")); //TODO
+        write!(f, "EwkbPoint")?; //TODO
         Ok(())
     }
 }
@@ -314,28 +314,13 @@ impl<'a> EwkbWrite for EwkbPoint<'a> {
         self.srid
     }
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        try!(w.write_f64::<LittleEndian>(self.geom.x()));
-        try!(w.write_f64::<LittleEndian>(self.geom.y()));
+        w.write_f64::<LittleEndian>(self.geom.x())?;
+        w.write_f64::<LittleEndian>(self.geom.y())?;
         self.geom.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
         self.geom.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
         Ok(())
     }
 }
-
-/*
-impl EwkbWrite for Point {
-    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-        //lol
-        let x = unsafe { *mem::transmute::<_, *const f64>(self) };
-        let y = unsafe { *mem::transmute::<_, *const f64>(self).offset(1) };
-        try!(w.write_f64::<LittleEndian>(x));
-        try!(w.write_f64::<LittleEndian>(y));
-        self.opt_z().map(|z| w.write_f64::<LittleEndian>(z));
-        self.opt_m().map(|m| w.write_f64::<LittleEndian>(m));
-        Ok(())
-     }
-}
-*/
 
 
 macro_rules! point_container_type {
@@ -441,7 +426,7 @@ macro_rules! impl_read_for_point_container_type {
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut points: Vec<P> = vec![];
-                let size = try!(read_u32(raw, is_be)) as usize;
+                let size = read_u32(raw, is_be)? as usize;
                 for _ in 0..size {
                     points.push(P::read_ewkb_body(raw, is_be, srid)?);
                 }
@@ -462,7 +447,7 @@ macro_rules! impl_read_for_point_container_type {
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut points: Vec<P> = vec![];
-                let size = try!(read_u32(raw, is_be)) as usize;
+                let size = read_u32(raw, is_be)? as usize;
                 for _ in 0..size {
                     points.push(P::read_ewkb(raw)?);
                 }
@@ -485,7 +470,7 @@ macro_rules! impl_read_for_geometry_container_type {
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
-                let size = try!(read_u32(raw, is_be)) as usize;
+                let size = read_u32(raw, is_be)? as usize;
                 for _ in 0..size {
                     $itemname.push($itemtype::read_ewkb_body(raw, is_be, srid)?);
                  }
@@ -505,7 +490,7 @@ macro_rules! impl_read_for_geometry_container_type {
             }
             fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error> {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
-                let size = try!(read_u32(raw, is_be)) as usize;
+                let size = read_u32(raw, is_be)? as usize;
                 for _ in 0..size {
                     $itemname.push($itemtype::read_ewkb(raw)?);
                  }
@@ -538,7 +523,7 @@ macro_rules! point_container_write {
                   I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                try!(write!(f, "$ewkbtype")); //TODO
+                write!(f, "$ewkbtype")?; //TODO
                 Ok(())
             }
         }
@@ -556,10 +541,10 @@ macro_rules! point_container_write {
             }
 
             fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-                try!(w.write_u32::<LittleEndian>(self.geom.points().len() as u32));
+                w.write_u32::<LittleEndian>(self.geom.points().len() as u32)?;
                 for geom in self.geom.points() {
                     let wkb = EwkbPoint { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    try!(wkb.$writecmd(w));
+                    wkb.$writecmd(w)?;
                 }
                 Ok(())
             }
@@ -606,7 +591,7 @@ macro_rules! geometry_container_write {
                   J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                try!(write!(f, "$ewkbtype")); //TODO
+                write!(f, "$ewkbtype")?; //TODO
                 Ok(())
             }
         }
@@ -626,10 +611,10 @@ macro_rules! geometry_container_write {
             }
 
             fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-                try!(w.write_u32::<LittleEndian>(self.geom.$itemname().len() as u32));
+                w.write_u32::<LittleEndian>(self.geom.$itemname().len() as u32)?;
                 for geom in self.geom.$itemname() {
                     let wkb = $ewkbitemtype { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    try!(wkb.$writecmd(w));
+                    wkb.$writecmd(w)?;
                 }
                 Ok(())
             }
@@ -680,7 +665,7 @@ macro_rules! geometry_container_write {
                   J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                try!(write!(f, "$ewkbtype")); //TODO
+                write!(f, "$ewkbtype")?; //TODO
                 Ok(())
             }
         }
@@ -702,10 +687,10 @@ macro_rules! geometry_container_write {
             }
 
             fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
-                try!(w.write_u32::<LittleEndian>(self.geom.$itemname().len() as u32));
+                w.write_u32::<LittleEndian>(self.geom.$itemname().len() as u32)?;
                 for geom in self.geom.$itemname() {
                     let wkb = $ewkbitemtype { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    try!(wkb.$writecmd(w));
+                    wkb.$writecmd(w)?;
                 }
                 Ok(())
             }
@@ -813,13 +798,13 @@ impl<P> EwkbRead for GeometryT<P>
         P::point_type()
     }
     fn read_ewkb<R: Read>(raw: &mut R) -> Result<Self, Error> {
-        let byte_order = try!(raw.read_i8());
+        let byte_order = raw.read_i8()?;
         let is_be = byte_order == 0i8;
 
-        let type_id = try!(read_u32(raw, is_be));
+        let type_id = read_u32(raw, is_be)?;
         let mut srid: Option<i32> = None;
         if type_id & 0x20000000 == 0x20000000 {
-           srid = Some(try!(read_i32(raw, is_be)));
+           srid = Some(read_i32(raw, is_be)?);
         }
 
         let geom = match type_id & 0xff {
@@ -867,14 +852,14 @@ impl<P> EwkbRead for GeometryCollectionT<P>
     }
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, _srid: Option<i32>) -> Result<Self, Error> {
         let mut ret = GeometryCollectionT::new();
-        let size = try!(read_u32(raw, is_be)) as usize;
+        let size = read_u32(raw, is_be)? as usize;
         for _ in 0..size {
-            let is_be = try!(raw.read_i8()) == 0i8;
+            let is_be = raw.read_i8()? == 0i8;
 
-            let type_id = try!(read_u32(raw, is_be));
+            let type_id = read_u32(raw, is_be)?;
             let mut srid: Option<i32> = None;
             if type_id & 0x20000000 == 0x20000000 {
-               srid = Some(try!(read_i32(raw, is_be)));
+               srid = Some(read_i32(raw, is_be)?);
             }
             let geom = match type_id & 0xff {
                 0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid)?),
