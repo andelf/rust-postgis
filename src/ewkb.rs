@@ -443,7 +443,7 @@ macro_rules! impl_read_for_point_container_type {
                 let mut points: Vec<P> = vec![];
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
-                    points.push(P::read_ewkb_body(raw, is_be, srid).unwrap());
+                    points.push(P::read_ewkb_body(raw, is_be, srid)?);
                 }
                 Ok($geotype::<P> {points: points, srid: srid})
             }
@@ -464,7 +464,7 @@ macro_rules! impl_read_for_point_container_type {
                 let mut points: Vec<P> = vec![];
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
-                    points.push(P::read_ewkb(raw).unwrap());
+                    points.push(P::read_ewkb(raw)?);
                 }
                 Ok($geotype::<P> {points: points, srid: srid})
             }
@@ -487,7 +487,7 @@ macro_rules! impl_read_for_geometry_container_type {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
-                    $itemname.push($itemtype::read_ewkb_body(raw, is_be, srid).unwrap());
+                    $itemname.push($itemtype::read_ewkb_body(raw, is_be, srid)?);
                  }
                 Ok($geotype::<P> {$itemname: $itemname, srid: srid})
             }
@@ -507,7 +507,7 @@ macro_rules! impl_read_for_geometry_container_type {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
                 let size = try!(read_u32(raw, is_be)) as usize;
                 for _ in 0..size {
-                    $itemname.push($itemtype::read_ewkb(raw).unwrap());
+                    $itemname.push($itemtype::read_ewkb(raw)?);
                  }
                 Ok($geotype::<P> {$itemname: $itemname, srid: srid})
             }
@@ -823,13 +823,13 @@ impl<P> EwkbRead for GeometryT<P>
         }
 
         let geom = match type_id & 0xff {
-            0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid).unwrap()),
-            0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid).unwrap()),
-            0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
-            0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid).unwrap()),
-            0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid).unwrap()),
-            0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
-            0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(raw, is_be, srid).unwrap()),
+            0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid)?),
+            0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid)?),
+            0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid)?),
+            0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid)?),
+            0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid)?),
+            0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid)?),
+            0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(raw, is_be, srid)?),
             _    => return Err(Error::Read(format!("Error reading generic geometry type - unsupported type id {}.", type_id)))
         };
         Ok(geom)
@@ -877,13 +877,13 @@ impl<P> EwkbRead for GeometryCollectionT<P>
                srid = Some(try!(read_i32(raw, is_be)));
             }
             let geom = match type_id & 0xff {
-                0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid).unwrap()),
-                0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid).unwrap()),
-                0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
-                0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid).unwrap()),
-                0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid).unwrap()),
-                0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid).unwrap()),
-                0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(raw, is_be, srid).unwrap()),
+                0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid)?),
+                0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid)?),
+                0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid)?),
+                0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid)?),
+                0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid)?),
+                0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid)?),
+                0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(raw, is_be, srid)?),
                 _    => return Err(Error::Read(format!("Error reading generic geometry type - unsupported type id {}.", type_id)))
             };
             ret.geometries.push(geom);
@@ -1122,6 +1122,15 @@ fn test_geometry_read() {
     let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
     let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
     assert_eq!(format!("{:?}", geom), "GeometryCollection(GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] })");
+}
+
+#[test]
+fn test_read_error() {
+    // SELECT 'LINESTRING (10 -20, 0 -0.5)'::geometry
+    let ewkb = hex_to_vec("010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
+    let poly = PolygonT::<Point>::read_ewkb(&mut ewkb.as_slice());
+    assert!(poly.is_err());
+    assert_eq!(format!("{:?}", poly), "Err(Read(\"error while reading: Error { repr: Custom(Custom { kind: UnexpectedEof, error: StringError(\\\"failed to fill whole buffer\\\") }) }\"))");
 }
 
 #[test]
