@@ -38,7 +38,7 @@ macro_rules! impl_sql_for_point_type {
             accepts_geography!();
             fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
-                ewkb::$ptype::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to POINT", ty).into())
+                ewkb::$ptype::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!($ptype)).into())
             }
         }
 
@@ -67,7 +67,7 @@ macro_rules! impl_sql_for_geom_type {
             accepts_geography!();
             fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
-                ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to LINESTRING", ty).into())
+                ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!($geotype)).into())
             }
         }
 
@@ -152,7 +152,7 @@ impl<P> FromSql for ewkb::GeometryT<P>
     accepts_geography!();
     fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
-        ewkb::GeometryT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
+        ewkb::GeometryT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
     }
 }
 
@@ -162,7 +162,7 @@ impl<P> FromSql for ewkb::GeometryCollectionT<P>
     accepts_geography!();
     fn from_sql(ty: &Type, raw: &[u8], _ctx: &SessionInfo) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
-        ewkb::GeometryCollectionT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
+        ewkb::GeometryCollectionT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
     }
 }
 
@@ -484,6 +484,15 @@ mod tests {
         let result = or_panic!(conn.query("SELECT geom FROM geomtests", &[]));
         let geom = result.iter().map(|r| r.get::<_, ewkb::GeometryZ>(0)).last().unwrap();
         assert_eq!(format!("{:?}", geom), "Point(PointZ { x: 10, y: -20, z: 99, srid: Some(4326) })");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_select_type_error() {
+        let conn = connect();
+        let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
+        let poly = result.iter().map(|r| r.get_opt::<_, ewkb::Polygon>(0)).last().unwrap();
+        assert_eq!(format!("{:?}", poly), "Some(Err(Conversion(StringError(\"cannot convert geometry to PolygonT\"))))");
     }
 
     #[test]

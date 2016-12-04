@@ -590,7 +590,7 @@ fn test_write_point() {
 fn test_write_line() {
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line.as_ewkb()), "$ewkbtype");
+    assert_eq!(format!("{:?}", line.as_ewkb()), "EwkbLineString");
     assert_eq!(line.as_ewkb().to_hex_ewkb(), "010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
 }
 
@@ -598,7 +598,7 @@ fn test_write_line() {
 fn test_write_polygon() {
     let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
     let polygon = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", polygon.as_ewkb()), "$ewkbtype");
+    assert_eq!(format!("{:?}", polygon.as_ewkb()), "EwkbPolygon");
     assert_eq!(polygon.as_ewkb().to_hex_ewkb(), "010300000002000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000050000000000000000002440000000000000244000000000000000C0000000000000244000000000000000C000000000000000C0000000000000244000000000000000C000000000000024400000000000002440");
 }
 
@@ -606,7 +606,7 @@ fn test_write_polygon() {
 fn test_write_multipoint() {
     let twkb = hex_to_vec("04000214271326"); // SELECT encode(ST_AsTWKB('MULTIPOINT ((10 -20), (0 -0.5))'::geometry), 'hex')
     let multipoint = MultiPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", multipoint.as_ewkb()), "$ewkbtype");
+    assert_eq!(format!("{:?}", multipoint.as_ewkb()), "EwkbMultiPoint");
     //assert_eq!(multipoint.as_ewkb().to_hex_ewkb(), "0104000000020000000101000000000000000000244000000000000034C001010000000000000000000000000000000000E0BF");
     // "MULTIPOINT(10 -20,0 -1)"
     assert_eq!(multipoint.as_ewkb().to_hex_ewkb(), "0104000000020000000101000000000000000000244000000000000034C001010000000000000000000000000000000000F0BF");
@@ -616,7 +616,7 @@ fn test_write_multipoint() {
 fn test_write_multiline() {
     let twkb = hex_to_vec("05000202142713260200020400"); // SELECT encode(ST_AsTWKB('MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry), 'hex')
     let multiline = MultiLineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", multiline.as_ewkb()), "$ewkbtype");
+    assert_eq!(format!("{:?}", multiline.as_ewkb()), "EwkbMultiLineString");
     //assert_eq!(multiline.as_ewkb().to_hex_ewkb(), "010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
     // "MULTILINESTRING((10 -20,0 -1),(0 0,2 0))"
     assert_eq!(multiline.as_ewkb().to_hex_ewkb(), "010500000002000000010200000002000000000000000000244000000000000034C00000000000000000000000000000F0BF0102000000020000000000000000000000000000000000000000000000000000400000000000000000");
@@ -626,6 +626,6 @@ fn test_write_multiline() {
 fn test_write_multipoly() {
     let twkb = hex_to_vec("060002010500000400000403000003010514141700001718000018"); // SELECT encode(ST_AsTWKB('MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry), 'hex')
     let multipoly = MultiPolygon::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", multipoly.as_ewkb()), "$ewkbtype");
+    assert_eq!(format!("{:?}", multipoly.as_ewkb()), "EwkbMultiPolygon");
     assert_eq!(multipoly.as_ewkb().to_hex_ewkb(), "010600000002000000010300000001000000050000000000000000000000000000000000000000000000000000400000000000000000000000000000004000000000000000400000000000000000000000000000004000000000000000000000000000000000010300000001000000050000000000000000002440000000000000244000000000000000C0000000000000244000000000000000C000000000000000C0000000000000244000000000000000C000000000000024400000000000002440");
 }

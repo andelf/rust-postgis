@@ -523,7 +523,7 @@ macro_rules! point_container_write {
                   I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "$ewkbtype")?; //TODO
+                write!(f, stringify!($ewkbtype))?; //TODO
                 Ok(())
             }
         }
@@ -591,7 +591,7 @@ macro_rules! geometry_container_write {
                   J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "$ewkbtype")?; //TODO
+                write!(f, stringify!($ewkbtype))?; //TODO
                 Ok(())
             }
         }
@@ -665,7 +665,7 @@ macro_rules! geometry_container_write {
                   J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "$ewkbtype")?; //TODO
+                write!(f, stringify!($ewkbtype))?; //TODO
                 Ok(())
             }
         }
