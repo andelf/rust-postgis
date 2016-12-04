@@ -15,6 +15,7 @@
 //!
 //! fn main() {
 //!     // conn ....
+//!     # let conn = Connection::connect("postgresql://postgres@localhost", TlsMode::None).unwrap();
 //!     for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
 //!         let route: ewkb::LineString = row.get("route");
 //!         let last_stop = route.points().last().unwrap();

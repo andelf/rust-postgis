@@ -8,6 +8,7 @@
 //! use postgis::twkb;
 //! use postgis::LineString;
 //!
+//! # let conn = Connection::connect("postgresql://postgres@localhost", TlsMode::None).unwrap();
 //! for row in &conn.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
 //!     let route: twkb::LineString = row.get(0);
 //!     let last_stop = route.points().last().unwrap();

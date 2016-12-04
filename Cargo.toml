@@ -10,6 +10,9 @@ documentation = "http://www.rust-ci.org/andelf/rust-postgis/doc/postgis/"
 keywords = ["PostgreSQL", "PostGIS", "GIS", "GEO"]
 license = "MIT"
 
+[lib]
+doctest = false
+
 [dependencies]
 postgres = "^0.12"
 byteorder = "^0.5"
