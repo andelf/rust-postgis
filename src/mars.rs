@@ -5,6 +5,8 @@
 //  Description : WGS84 GCJ02 conversion for rust
 //  Time-stamp: <2015-06-01 10:45:55 andelf>
 
+//! Conversion between GCJ-02 and WGS-84 coordinates.
+
 use ewkb;
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java

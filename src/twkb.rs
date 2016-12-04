@@ -2,6 +2,19 @@
 // Copyright (c) Pirmin Kalberer. All rights reserved.
 //
 
+//! Read geometries in [Tiny WKB](https://github.com/TWKB/Specification/blob/master/twkb.md) format.
+//!
+//! ```rust,no_run
+//! use postgis::twkb;
+//! use postgis::LineString;
+//!
+//! for row in &conn.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
+//!     let route: twkb::LineString = row.get(0);
+//!     let last_stop = route.points().last().unwrap();
+//!     let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop.as_ewkb()]);
+//! }
+//! ```
+
 use types as postgis;
 use ewkb;
 use std::io::prelude::*;
@@ -12,8 +25,6 @@ use std::f64;
 use std::slice::Iter;
 use byteorder::ReadBytesExt;
 use error::Error;
-
-// Tiny WKB specification: https://github.com/TWKB/Specification/blob/master/twkb.md
 
 
 #[derive(PartialEq, Clone, Debug)]
@@ -51,6 +62,7 @@ pub struct MultiPolygon {
     pub ids: Option<Vec<u64>>,
 }
 
+#[doc(hidden)]
 #[derive(Default,Debug)]
 pub struct TwkbInfo {
     geom_type: u8,
@@ -108,8 +120,10 @@ pub trait TwkbGeom: fmt::Debug + Sized {
         Self::read_twkb_body(raw, &twkb_info)
     }
 
+    #[doc(hidden)]
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error>;
 
+    #[doc(hidden)]
     fn read_relative_point<R: Read>(raw: &mut R, twkb_info: &TwkbInfo, x: f64, y: f64, z: Option<f64>, m: Option<f64>)
         -> Result<(f64, f64, Option<f64>, Option<f64>), Error>
     {

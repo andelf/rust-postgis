@@ -1,6 +1,9 @@
 //
 // Copyright (c) ShuYu Wang <andelf@gmail.com>, Feather Workshop and Pirmin Kalberer. All rights reserved.
 //
+//! Read and write geometries in [OGC WKB](http://www.opengeospatial.org/standards/sfa) format.
+//!
+//! Support for SRID information according to [PostGIS EWKB extensions](https://svn.osgeo.org/postgis/trunk/doc/ZMSgeoms.txt)
 
 use types as postgis;
 use std;
@@ -11,10 +14,6 @@ use std::slice::Iter;
 use std::iter::FromIterator;
 use byteorder::{ReadBytesExt, WriteBytesExt, BigEndian, LittleEndian};
 use error::Error;
-
-// OGC WKB specification: http://www.opengeospatial.org/standards/sfa
-// PostGIS EWKB extensions: https://svn.osgeo.org/postgis/trunk/doc/ZMSgeoms.txt
-
 
 // --- Structs for reading PostGIS geometries into
 
@@ -78,6 +77,7 @@ pub trait EwkbRead: fmt::Debug + Sized {
         Self::read_ewkb_body(raw, is_be, srid)
     }
 
+    #[doc(hidden)]
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error>;
 }
 
@@ -114,6 +114,7 @@ pub trait EwkbWrite: fmt::Debug + Sized {
         self.write_ewkb_body(w)?;
         Ok(())
     }
+    #[doc(hidden)]
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error>;
 
     fn to_hex_ewkb(&self) -> String {
@@ -720,9 +721,13 @@ point_container_write!(LineString and AsEwkbLineString for LineStringT
                        to EwkbLineString with type code 0x02,
                        command write_ewkb_body);
 
+/// OGC LineString type
 pub type LineString = LineStringT<Point>;
+/// OGC LineStringZ type
 pub type LineStringZ = LineStringT<PointZ>;
+/// OGC LineStringM type
 pub type LineStringM = LineStringT<PointM>;
+/// OGC LineStringZM type
 pub type LineStringZM = LineStringT<PointZM>;
 
 /// Polygon
@@ -733,9 +738,13 @@ geometry_container_write!(Polygon and AsEwkbPolygon for PolygonT
                           contains EwkbLineString,LineStringT as LineString named rings,
                           command write_ewkb_body);
 
+/// OGC Polygon type
 pub type Polygon = PolygonT<Point>;
+/// OGC PolygonZ type
 pub type PolygonZ = PolygonT<PointZ>;
+/// OGC PolygonM type
 pub type PolygonM = PolygonT<PointM>;
+/// OGC PolygonZM type
 pub type PolygonZM = PolygonT<PointZM>;
 
 /// MultiPoint
@@ -745,9 +754,13 @@ point_container_write!(MultiPoint and AsEwkbMultiPoint for MultiPointT
                        to EwkbMultiPoint with type code 0x04,
                        command write_ewkb);
 
+/// OGC MultiPoint type
 pub type MultiPoint = MultiPointT<Point>;
+/// OGC MultiPointZ type
 pub type MultiPointZ = MultiPointT<PointZ>;
+/// OGC MultiPointM type
 pub type MultiPointM = MultiPointT<PointM>;
+/// OGC MultiPointZM type
 pub type MultiPointZM = MultiPointT<PointZM>;
 
 /// MultiLineString
@@ -758,9 +771,13 @@ geometry_container_write!(MultiLineString and AsEwkbMultiLineString for MultiLin
                           contains EwkbLineString,LineStringT as LineString named lines,
                           command write_ewkb);
 
+/// OGC MultiLineString type
 pub type MultiLineString = MultiLineStringT<Point>;
+/// OGC MultiLineStringZ type
 pub type MultiLineStringZ = MultiLineStringT<PointZ>;
+/// OGC MultiLineStringM type
 pub type MultiLineStringM = MultiLineStringT<PointM>;
+/// OGC MultiLineStringZM type
 pub type MultiLineStringZM = MultiLineStringT<PointZM>;
 
 
@@ -772,9 +789,13 @@ geometry_container_write!(multipoly MultiPolygon and AsEwkbMultiPolygon for Mult
                           contains EwkbPolygon,PolygonT as Polygon named polygons,
                           command write_ewkb);
 
+/// OGC MultiPolygon type
 pub type MultiPolygon = MultiPolygonT<Point>;
+/// OGC MultiPolygonZ type
 pub type MultiPolygonZ = MultiPolygonT<PointZ>;
+/// OGC MultiPolygonM type
 pub type MultiPolygonM = MultiPolygonT<PointM>;
+/// OGC MultiPolygonZM type
 pub type MultiPolygonZM = MultiPolygonT<PointZM>;
 
 
@@ -824,13 +845,16 @@ impl<P> EwkbRead for GeometryT<P>
     }
 }
 
+/// OGC Geometry type
 pub type Geometry = GeometryT<Point>;
+/// OGC GeometryZ type
 pub type GeometryZ = GeometryT<PointZ>;
+/// OGC GeometryM type
 pub type GeometryM = GeometryT<PointM>;
+/// OGC GeometryZM type
 pub type GeometryZM = GeometryT<PointZM>;
 
 
-/// GeometryCollection
 #[derive(Debug)]
 pub struct GeometryCollectionT<P: postgis::Point + EwkbRead> {
     pub geometries: Vec<GeometryT<P>>
@@ -877,9 +901,13 @@ impl<P> EwkbRead for GeometryCollectionT<P>
     }
 }
 
+/// OGC GeometryCollection type
 pub type GeometryCollection = GeometryCollectionT<Point>;
+/// OGC GeometryCollectionZ type
 pub type GeometryCollectionZ = GeometryCollectionT<PointZ>;
+/// OGC GeometryCollectionM type
 pub type GeometryCollectionM = GeometryCollectionT<PointM>;
+/// OGC GeometryCollectionZM type
 pub type GeometryCollectionZM = GeometryCollectionT<PointZM>;
 
 
