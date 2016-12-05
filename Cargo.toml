@@ -1,12 +1,12 @@
 [package]
 name = "postgis"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["ShuYu Wang <andelf@gmail.com>", "Pirmin Kalberer <pka@sourcepole.ch>"]
 description = "An extension to rust-postgres, adds support for PostGIS."
 homepage = "https://github.com/andelf/rust-postgis"
 repository = "https://github.com/andelf/rust-postgis"
 readme = "README.md"
-documentation = "http://www.rust-ci.org/andelf/rust-postgis/doc/postgis/"
+documentation = "https://docs.rs/postgis/"
 keywords = ["PostgreSQL", "PostGIS", "GIS", "GEO"]
 license = "MIT"
 
