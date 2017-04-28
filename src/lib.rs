@@ -39,7 +39,7 @@
 extern crate postgres;
 extern crate byteorder;
 
-mod error;
+pub mod error;
 mod types;
 pub use types::{Point, LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon};
 pub mod ewkb;
