@@ -6,17 +6,16 @@ use types::{Point, LineString, Polygon};
 use ewkb::{self, EwkbRead, EwkbWrite, AsEwkbPoint, AsEwkbLineString, AsEwkbPolygon, AsEwkbMultiPoint, AsEwkbMultiLineString, AsEwkbMultiPolygon};
 use twkb::{self, TwkbGeom};
 use std::io::Cursor;
-use postgres::types::{Type, IsNull, ToSql, FromSql};
+use postgres::types::{Type, IsNull, ToSql, FromSql, BYTEA};
 use std::error::Error;
 
 
 macro_rules! accepts_geography {
     () => (
         fn accepts(ty: &Type) -> bool {
-            match ty {
-                &Type::Other(ref t) if t.name() == "geography" => true,
-                &Type::Other(ref t) if t.name() == "geometry"  => true,
-                _ => false
+            match ty.name() {
+                "geography" | "geometry" => true,
+                _ => false,
             }
         }
     )
@@ -24,31 +23,34 @@ macro_rules! accepts_geography {
 
 
 impl<'a> ToSql for ewkb::EwkbPoint<'a> {
-    to_sql_checked!();
-    accepts_geography!();
     fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
         self.write_ewkb(out)?;
         Ok(IsNull::No)
     }
+
+    accepts_geography!();
+    to_sql_checked!();
 }
 
 macro_rules! impl_sql_for_point_type {
     ($ptype:ident) => (
         impl FromSql for ewkb::$ptype {
-            accepts_geography!();
             fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
                 ewkb::$ptype::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!($ptype)).into())
             }
+
+            accepts_geography!();
         }
 
         impl ToSql for ewkb::$ptype {
-            to_sql_checked!();
-            accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
                 self.as_ewkb().write_ewkb(out)?;
                 Ok(IsNull::No)
             }
+
+            to_sql_checked!();
+            accepts_geography!();
         }
     )
 }
@@ -64,22 +66,24 @@ macro_rules! impl_sql_for_geom_type {
         impl<'a, T> FromSql for ewkb::$geotype<T>
             where T: 'a + Point + EwkbRead
         {
-            accepts_geography!();
             fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
                 ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!($geotype)).into())
             }
+
+            accepts_geography!();
         }
 
         impl<'a, T> ToSql for ewkb::$geotype<T>
             where T: 'a + Point + EwkbRead
         {
-            to_sql_checked!();
-            accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
                 self.as_ewkb().write_ewkb(out)?;
                 Ok(IsNull::No)
             }
+
+            to_sql_checked!();
+            accepts_geography!();
         }
     )
 }
@@ -97,12 +101,13 @@ macro_rules! impl_sql_for_ewkb_type {
             where T: 'a + Point,
                   I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
-            to_sql_checked!();
-            accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
                 self.write_ewkb(out)?;
                 Ok(IsNull::No)
             }
+
+            to_sql_checked!();
+            accepts_geography!();
         }
     );
     ($ewkbtype:ident contains $itemtypetrait:ident) => (
@@ -112,12 +117,13 @@ macro_rules! impl_sql_for_ewkb_type {
                   T: 'a + $itemtypetrait<'a, ItemType=P, Iter=I>,
                   J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
         {
-            to_sql_checked!();
-            accepts_geography!();
             fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
                 self.write_ewkb(out)?;
                 Ok(IsNull::No)
             }
+
+            to_sql_checked!();
+            accepts_geography!();
         }
     );
     (multipoly $ewkbtype:ident contains $itemtypetrait:ident) => (
@@ -149,64 +155,57 @@ impl_sql_for_ewkb_type!(multipoly EwkbMultiPolygon contains Polygon);
 impl<P> FromSql for ewkb::GeometryT<P>
     where P: Point + EwkbRead
 {
-    accepts_geography!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         ewkb::GeometryT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
     }
+
+    accepts_geography!();
 }
 
 impl<P> FromSql for ewkb::GeometryCollectionT<P>
     where P: Point + EwkbRead
 {
-    accepts_geography!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         ewkb::GeometryCollectionT::<P>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
     }
+
+    accepts_geography!();
 }
 
 
 // --- TWKB ---
 
-macro_rules! accepts_bytea {
-    () => (
-        fn accepts(ty: &Type) -> bool {
-            match ty {
-                &Type::Bytea  => true,
-                _ => false
-            }
-        }
-    )
-}
-
-
 impl FromSql for twkb::Point {
-    accepts_bytea!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::Point::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to Point", ty).into())
     }
+
+    accepts!(BYTEA);
 }
 
 impl FromSql for twkb::LineString {
-    accepts_bytea!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::LineString::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to LineString", ty).into())
     }
+
+    accepts!(BYTEA);
 }
 
 impl FromSql for twkb::Polygon {
-    accepts_bytea!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::Polygon::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to Polygon", ty).into())
     }
+
+    accepts!(BYTEA);
 }
 
 impl FromSql for twkb::MultiPoint {
-    accepts_bytea!();
+    accepts!(BYTEA);
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiPoint::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
@@ -214,19 +213,21 @@ impl FromSql for twkb::MultiPoint {
 }
 
 impl FromSql for twkb::MultiLineString {
-    accepts_bytea!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiLineString::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiLineString", ty).into())
     }
+
+    accepts!(BYTEA);
 }
 
 impl FromSql for twkb::MultiPolygon {
-    accepts_bytea!();
     fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiPolygon::read_twkb(&mut rdr).map_err(|_| format!("cannot convert {} to MultiPolygon", ty).into())
     }
+
+    accepts!(BYTEA);
 }
 
 

@@ -14,5 +14,5 @@ license = "MIT"
 doctest = false
 
 [dependencies]
-postgres = "^0.14"
+postgres = "^0.15"
 byteorder = "^0.5"
