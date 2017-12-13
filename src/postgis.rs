@@ -506,7 +506,7 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry", &[]));
         let geom = result.iter().map(|r| r.get::<_, ewkb::GeometryCollection>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] }");
+        assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None }");
     }
 
     #[test]
