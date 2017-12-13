@@ -302,8 +302,9 @@ mod tests {
         // 'LINESTRING (10 -20, -0 -0.5)'
         let line = ewkb::LineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
-        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
-        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('LINESTRING(10 -20, 0 -0.5)'), ST_AsText(geom) FROM geomtests", &[]));
+        let (ok, err) = result.iter().map(|r| (r.get::<_, bool>(0), r.get::<_, String>(1))).last().unwrap();
+        assert!(ok, "bad geom: {}", err);
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
 
         let conn = connect();
@@ -312,8 +313,9 @@ mod tests {
         // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
         let line = ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
-        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
-        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING(10 -20, 0 -0.5)'), ST_AsText(geom) FROM geomtests", &[]));
+        let (ok, err) = result.iter().map(|r| (r.get::<_, bool>(0), r.get::<_, String>(1))).last().unwrap();
+        assert!(ok, "bad geom: {}", err);
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
 
         let conn = connect();
@@ -323,8 +325,9 @@ mod tests {
         // 'SRID=4326;LINESTRING (10 -20 100, -0 -0.5 101)'
         let line = ewkb::LineStringZ {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
-        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING (10 -20 100, -0 -0.5 101)') FROM geomtests", &[]));
-        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING Z (10 -20 100, 0 -0.5 101)'), ST_AsText(geom) FROM geomtests", &[]));
+        let (ok, err) = result.iter().map(|r| (r.get::<_, bool>(0), r.get::<_, String>(1))).last().unwrap();
+        assert!(ok, "bad geom: {}", err);
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
     }
 
@@ -544,8 +547,9 @@ mod tests {
         let line = result.iter().map(|r| r.get::<_, twkb::LineString>(0)).last().unwrap();
 
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line.as_ewkb()]));
-        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('LINESTRING (10 -20, -0 -0.5)') FROM geomtests", &[]));
-        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('LINESTRING (10 -20, 0 -0.5)'), ST_AsText(geom) FROM geomtests", &[]));
+        let (ok, err) = result.iter().map(|r| (r.get::<_, bool>(0), r.get::<_, String>(1))).last().unwrap();
+        assert!(ok, "bad geom: {}", err);
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
     }
 
