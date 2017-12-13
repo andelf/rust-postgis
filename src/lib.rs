@@ -35,6 +35,7 @@
 //! }
 //! ```
 
+#![feature(underscore_lifetimes)]
 #[macro_use(accepts, to_sql_checked)]
 extern crate postgres;
 extern crate byteorder;

@@ -961,41 +961,33 @@ impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> EwkbWrite for EwkbGeometry<
     }
 }
 
-// NOTE: Implement once for each point type to avoid trait lifetime constraints
-macro_rules! impl_as_ewkb_geometry {
-    ($ptype:ident) => (
-        impl<'a> AsEwkbGeometry<'a> for GeometryT<$ptype> {
-            type PointType = $ptype;
-            type PointIter = Iter<'a, $ptype>;
-            type MultiPointType = MultiPointT<$ptype>;
-            type LineType = LineStringT<$ptype>;
-            type LineIter = Iter<'a, Self::LineType>;
-            type MultiLineType = MultiLineStringT<$ptype>;
-            type PolyType = PolygonT<$ptype>;
-            type PolyIter = Iter<'a, Self::PolyType>;
-            type MultiPolyType = MultiPolygonT<$ptype>;
-            type GeomType = GeometryT<$ptype>;
-            type GeomIter = Iter<'a, Self::GeomType>;
-            type GeomCollection = GeometryCollectionT<$ptype>;
-            fn as_ewkb(&'a self) -> EwkbGeometry<'a, Self::PointType, Self::PointIter, Self::MultiPointType, Self::LineType, Self::LineIter, Self::MultiLineType, Self::PolyType, Self::PolyIter, Self::MultiPolyType, Self::GeomType, Self::GeomIter, Self::GeomCollection> {
-                match *self {
-                    GeometryT::Point(ref geom) => EwkbGeometry::Point(geom.as_ewkb()),
-                    GeometryT::LineString(ref geom) => EwkbGeometry::LineString(geom.as_ewkb()),
-                    GeometryT::Polygon(ref geom) => EwkbGeometry::Polygon(geom.as_ewkb()),
-                    GeometryT::MultiPoint(ref geom) => EwkbGeometry::MultiPoint(geom.as_ewkb()),
-                    GeometryT::MultiLineString(ref geom) => EwkbGeometry::MultiLineString(geom.as_ewkb()),
-                    GeometryT::MultiPolygon(ref geom) => EwkbGeometry::MultiPolygon(geom.as_ewkb()),
-                    GeometryT::GeometryCollection(ref geom) => EwkbGeometry::GeometryCollection(geom.as_ewkb()),
-                }
-            }
+impl<'a, P> AsEwkbGeometry<'a> for GeometryT<P>
+    where P: 'a + postgis::Point + EwkbRead + AsEwkbPoint<'a>
+{
+    type PointType = P;
+    type PointIter = Iter<'a, P>;
+    type MultiPointType = MultiPointT<P>;
+    type LineType = LineStringT<P>;
+    type LineIter = Iter<'a, Self::LineType>;
+    type MultiLineType = MultiLineStringT<P>;
+    type PolyType = PolygonT<P>;
+    type PolyIter = Iter<'a, Self::PolyType>;
+    type MultiPolyType = MultiPolygonT<P>;
+    type GeomType = GeometryT<P>;
+    type GeomIter = Iter<'a, Self::GeomType>;
+    type GeomCollection = GeometryCollectionT<P>;
+    fn as_ewkb(&'a self) -> EwkbGeometry<'a, Self::PointType, Self::PointIter, Self::MultiPointType, Self::LineType, Self::LineIter, Self::MultiLineType, Self::PolyType, Self::PolyIter, Self::MultiPolyType, Self::GeomType, Self::GeomIter, Self::GeomCollection> {
+        match *self {
+            GeometryT::Point(ref geom) => EwkbGeometry::Point(geom.as_ewkb()),
+            GeometryT::LineString(ref geom) => EwkbGeometry::LineString(geom.as_ewkb()),
+            GeometryT::Polygon(ref geom) => EwkbGeometry::Polygon(geom.as_ewkb()),
+            GeometryT::MultiPoint(ref geom) => EwkbGeometry::MultiPoint(geom.as_ewkb()),
+            GeometryT::MultiLineString(ref geom) => EwkbGeometry::MultiLineString(geom.as_ewkb()),
+            GeometryT::MultiPolygon(ref geom) => EwkbGeometry::MultiPolygon(geom.as_ewkb()),
+            GeometryT::GeometryCollection(ref geom) => EwkbGeometry::GeometryCollection(geom.as_ewkb()),
         }
-    )
+    }
 }
-
-impl_as_ewkb_geometry!(Point);
-impl_as_ewkb_geometry!(PointZ);
-impl_as_ewkb_geometry!(PointM);
-impl_as_ewkb_geometry!(PointZM);
 
 /// OGC Geometry type
 pub type Geometry = GeometryT<Point>;
@@ -1401,7 +1393,7 @@ fn test_geometrycollection_read() {
     // SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry
     let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
     let geom = GeometryCollectionT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] }");
+    assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None }");
 }
 
 #[test]
@@ -1433,7 +1425,7 @@ fn test_geometry_read() {
     // SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry
     let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
     let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", geom), "GeometryCollection(GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] })");
+    assert_eq!(format!("{:?}", geom), "GeometryCollection(GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None })");
 }
 
 #[test]
