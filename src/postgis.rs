@@ -3,7 +3,7 @@
 //
 
 use types::{Point, LineString, Polygon};
-use ewkb::{self, EwkbRead, EwkbWrite, AsEwkbPoint, AsEwkbLineString, AsEwkbPolygon, AsEwkbMultiPoint, AsEwkbMultiLineString, AsEwkbMultiPolygon};
+use ewkb::{self, EwkbRead, EwkbWrite, AsEwkbPoint, AsEwkbLineString, AsEwkbPolygon, AsEwkbMultiPoint, AsEwkbMultiLineString, AsEwkbMultiPolygon, AsEwkbGeometry};
 use twkb::{self, TwkbGeom};
 use std::io::Cursor;
 use postgres::types::{Type, IsNull, ToSql, FromSql, BYTEA};
@@ -162,6 +162,26 @@ impl<P> FromSql for ewkb::GeometryT<P>
 
     accepts_geography!();
 }
+
+// NOTE: Implement once for each point type to avoid trait lifetime constraints
+macro_rules! impl_geometry_to_sql {
+    ($ptype:path) => (
+        impl<'a> ToSql for ewkb::GeometryT<$ptype> {
+            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
+                self.as_ewkb().write_ewkb(out)?;
+                Ok(IsNull::No)
+            }
+
+            to_sql_checked!();
+            accepts_geography!();
+        }
+    )
+}
+
+impl_geometry_to_sql!(ewkb::Point);
+impl_geometry_to_sql!(ewkb::PointZ);
+impl_geometry_to_sql!(ewkb::PointM);
+impl_geometry_to_sql!(ewkb::PointZM);
 
 impl<P> FromSql for ewkb::GeometryCollectionT<P>
     where P: Point + EwkbRead

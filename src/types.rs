@@ -42,3 +42,39 @@ pub trait MultiPolygon<'a> {
     type Iter: Iterator<Item=&'a Self::ItemType>;
     fn polygons(&'a self) -> Self::Iter;
 }
+
+pub trait Geometry<'a> {
+    type Point: 'a + Point;
+    type LineString: 'a + LineString<'a>;
+    type Polygon: 'a + Polygon<'a>;
+    type MultiPoint: 'a + MultiPoint<'a>;
+    type MultiLineString: 'a + MultiLineString<'a>;
+    type MultiPolygon: 'a + MultiPolygon<'a>;
+    type GeometryCollection: 'a + GeometryCollection<'a>;
+    fn as_type(&'a self) -> GeometryType<'a, Self::Point, Self::LineString, Self::Polygon, Self::MultiPoint, Self::MultiLineString, Self::MultiPolygon, Self::GeometryCollection>;
+}
+
+pub enum GeometryType<'a, P, L, Y, MP, ML, MY, GC>
+    where P: 'a + Point,
+          L: 'a + LineString<'a>,
+          Y: 'a + Polygon<'a>,
+          MP: 'a + MultiPoint<'a>,
+          ML: 'a + MultiLineString<'a>,
+          MY: 'a + MultiPolygon<'a>,
+          GC: 'a + GeometryCollection<'a>
+{
+    Point(&'a P),
+    LineString(&'a L),
+    Polygon(&'a Y),
+    MultiPoint(&'a MP),
+    MultiLineString(&'a ML),
+    MultiPolygon(&'a MY),
+    GeometryCollection(&'a GC),
+}
+
+pub trait GeometryCollection<'a>
+{
+    type ItemType: 'a;
+    type Iter: Iterator<Item=&'a Self::ItemType>;
+    fn geometries(&'a self) -> Self::Iter;
+}
