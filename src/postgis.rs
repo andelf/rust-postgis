@@ -405,7 +405,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn test_insert_multipoylgon() {
+    fn test_insert_multipolygon() {
         let conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(MultiPolygon))", &[]));
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
@@ -417,6 +417,55 @@ mod tests {
         let multipoly = ewkb::MultiPolygon {srid: Some(4326), polygons: vec![poly1, poly2]};
         or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&multipoly]));
         let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))') FROM geomtests", &[]));
+        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_geometry() {
+        let conn = connect();
+        or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry)", &[]));
+        let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
+        // SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry
+        let multipoly = {
+            let line = ewkb::LineString {srid: Some(4326), points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
+            let poly1 = ewkb::Polygon {srid: Some(4326), rings: vec![line]};
+            let line = ewkb::LineString {srid: Some(4326), points: vec![p(10., 10.), p(-2., 10.), p(-2., -2.), p(10., -2.), p(10., 10.)]};
+            let poly2 = ewkb::Polygon {srid: Some(4326), rings: vec![line]};
+            ewkb::MultiPolygon {srid: Some(4326), polygons: vec![poly1, poly2]}
+        };
+        let geometry = ewkb::GeometryT::MultiPolygon(multipoly);
+        or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&geometry]));
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))') FROM geomtests", &[]));
+        assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_insert_geometrycollection() {
+        let conn = connect();
+        or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(GeometryCollection))", &[]));
+        let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
+        // SELECT 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
+        let line = ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
+        // SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry
+        let multipoly = {
+            let line = ewkb::LineString {srid: Some(4326), points: vec![p(0., 0.), p(2., 0.), p(2., 2.), p(0., 2.), p(0., 0.)]};
+            let poly1 = ewkb::Polygon {srid: Some(4326), rings: vec![line]};
+            let line = ewkb::LineString {srid: Some(4326), points: vec![p(10., 10.), p(-2., 10.), p(-2., -2.), p(10., -2.), p(10., 10.)]};
+            let poly2 = ewkb::Polygon {srid: Some(4326), rings: vec![line]};
+            ewkb::MultiPolygon {srid: Some(4326), polygons: vec![poly1, poly2]}
+        };
+        // SELECT 'SRID=4326;GEOMETRYCOLLECTION (LINESTRING (10 -20,0 -0.5), MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((10 10,-2 10,-2 -2,10 -2,10 10))))'::geometry
+        let collection = ewkb::GeometryCollection{
+            srid: Some(4326),
+            geometries: vec![
+                ewkb::GeometryT::LineString(line),
+                ewkb::GeometryT::MultiPolygon(multipoly),
+            ],
+        };
+        or_panic!(conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&collection]));
+        let result = or_panic!(conn.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;GEOMETRYCOLLECTION (LINESTRING (10 -20,0 -0.5), MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((10 10,-2 10,-2 -2,10 -2,10 10))))') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
     }
 

@@ -1136,19 +1136,20 @@ impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> EwkbWrite for EwkbGeometryC
 
     fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
         w.write_u32::<LittleEndian>(self.geom.geometries().len() as u32)?;
+
         for geom in self.geom.geometries() {
             match geom.as_type() {
                 postgis::GeometryType::Point(geom) => {
                     let wkb = EwkbPoint { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    wkb.write_ewkb_body(w)?;
+                    wkb.write_ewkb(w)?;
                 },
                 postgis::GeometryType::LineString(geom) => {
                     let wkb = EwkbLineString { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    wkb.write_ewkb_body(w)?;
+                    wkb.write_ewkb(w)?;
                 },
                 postgis::GeometryType::Polygon(geom) => {
                     let wkb = EwkbPolygon { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    wkb.write_ewkb_body(w)?;
+                    wkb.write_ewkb(w)?;
                 },
                 postgis::GeometryType::MultiPoint(geom) => {
                     let wkb = EwkbMultiPoint { geom: geom, srid: None, point_type: self.point_type.clone() };
@@ -1164,7 +1165,7 @@ impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> EwkbWrite for EwkbGeometryC
                 },
                 postgis::GeometryType::GeometryCollection(geom) => {
                     let wkb = EwkbGeometryCollection { geom: geom, srid: None, point_type: self.point_type.clone() };
-                    wkb.write_ewkb_body(w)?;
+                    wkb.write_ewkb(w)?;
                 },
             }
         }
