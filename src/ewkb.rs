@@ -692,7 +692,7 @@ macro_rules! geometry_container_write {
                 $ewkbtype { geom: self, srid: self.srid, point_type: Self::PointType::point_type() }
             }
         }
-    )
+    );
 }
 
 
@@ -793,6 +793,30 @@ pub enum GeometryT<P: postgis::Point + EwkbRead> {
     GeometryCollection(GeometryCollectionT<P>)
 }
 
+impl<'a, P> postgis::Geometry<'a> for GeometryT<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type Point = P;
+    type LineString = LineStringT<P>;
+    type Polygon = PolygonT<P>;
+    type MultiPoint = MultiPointT<P>;
+    type MultiLineString = MultiLineStringT<P>;
+    type MultiPolygon = MultiPolygonT<P>;
+    type GeometryCollection = GeometryCollectionT<P>;
+    fn as_type(&'a self) -> postgis::GeometryType<'a, Self::Point, Self::LineString, Self::Polygon, Self::MultiPoint, Self::MultiLineString, Self::MultiPolygon, Self::GeometryCollection> {
+        use ewkb::GeometryT as A;
+        use types::GeometryType as B;
+        match *self {
+            A::Point(ref geom) => B::Point(geom),
+            A::LineString(ref geom) => B::LineString(geom),
+            A::Polygon(ref geom) => B::Polygon(geom),
+            A::MultiPoint(ref geom) => B::MultiPoint(geom),
+            A::MultiLineString(ref geom) => B::MultiLineString(geom),
+            A::MultiPolygon(ref geom) => B::MultiPolygon(geom),
+            A::GeometryCollection(ref geom) => B::GeometryCollection(geom),
+        }
+    }
+}
 
 impl<P> EwkbRead for GeometryT<P>
     where P: postgis::Point + EwkbRead
@@ -827,6 +851,144 @@ impl<P> EwkbRead for GeometryT<P>
     }
 }
 
+pub enum EwkbGeometry<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>
+    where P: 'a + postgis::Point,
+          PI: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          MP: 'a + postgis::MultiPoint<'a, ItemType=P, Iter=PI>,
+          L: 'a + postgis::LineString<'a, ItemType=P, Iter=PI>,
+          LI: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
+          ML: 'a + postgis::MultiLineString<'a, ItemType=L, Iter=LI>,
+          Y: 'a + postgis::Polygon<'a, ItemType=L, Iter=LI>,
+          YI: 'a + Iterator<Item=&'a Y> + ExactSizeIterator<Item=&'a Y>,
+          MY: 'a + postgis::MultiPolygon<'a, ItemType=Y, Iter=YI>,
+          G: 'a + postgis::Geometry<'a, Point=P, LineString=L, Polygon=Y, MultiPoint=MP, MultiLineString=ML, MultiPolygon=MY, GeometryCollection=GC>,
+          GI: 'a + Iterator<Item=&'a G> + ExactSizeIterator<Item=&'a G>,
+          GC: 'a + postgis::GeometryCollection<'a, ItemType=G, Iter=GI>
+{
+    Point(EwkbPoint<'a>),
+    LineString(EwkbLineString<'a, P, PI>),
+    Polygon(EwkbPolygon<'a, P, PI, L, LI>),
+    MultiPoint(EwkbMultiPoint<'a, P, PI>),
+    MultiLineString(EwkbMultiLineString<'a, P, PI, L, LI>),
+    MultiPolygon(EwkbMultiPolygon<'a, P, PI, L, LI, Y, YI>),
+    GeometryCollection(EwkbGeometryCollection<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>),
+}
+
+pub trait AsEwkbGeometry<'a> {
+    type PointType: 'a + postgis::Point + EwkbRead;
+    type PointIter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
+    type MultiPointType: 'a + postgis::MultiPoint<'a, ItemType=Self::PointType, Iter=Self::PointIter>;
+    type LineType: 'a + postgis::LineString<'a, ItemType=Self::PointType, Iter=Self::PointIter>;
+    type LineIter: Iterator<Item=&'a Self::LineType>+ExactSizeIterator<Item=&'a Self::LineType>;
+    type MultiLineType: 'a + postgis::MultiLineString<'a, ItemType=Self::LineType, Iter=Self::LineIter>;
+    type PolyType: 'a + postgis::Polygon<'a, ItemType=Self::LineType, Iter=Self::LineIter>;
+    type PolyIter: Iterator<Item=&'a Self::PolyType>+ExactSizeIterator<Item=&'a Self::PolyType>;
+    type MultiPolyType: 'a + postgis::MultiPolygon<'a, ItemType=Self::PolyType, Iter=Self::PolyIter>;
+    type GeomType: 'a + postgis::Geometry<'a, Point=Self::PointType, LineString=Self::LineType, Polygon=Self::PolyType, MultiPoint=Self::MultiPointType, MultiLineString=Self::MultiLineType, MultiPolygon=Self::MultiPolyType, GeometryCollection=Self::GeomCollection>;
+    type GeomIter: Iterator<Item=&'a Self::GeomType>+ExactSizeIterator<Item=&'a Self::GeomType>;
+    type GeomCollection: 'a + postgis::GeometryCollection<'a, ItemType=Self::GeomType, Iter=Self::GeomIter>;
+    fn as_ewkb(&'a self) -> EwkbGeometry<'a, Self::PointType, Self::PointIter, Self::MultiPointType, Self::LineType, Self::LineIter, Self::MultiLineType, Self::PolyType, Self::PolyIter, Self::MultiPolyType, Self::GeomType, Self::GeomIter, Self::GeomCollection>;
+}
+
+impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> fmt::Debug for EwkbGeometry<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>
+    where P: 'a + postgis::Point,
+          PI: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          MP: 'a + postgis::MultiPoint<'a, ItemType=P, Iter=PI>,
+          L: 'a + postgis::LineString<'a, ItemType=P, Iter=PI>,
+          LI: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
+          ML: 'a + postgis::MultiLineString<'a, ItemType=L, Iter=LI>,
+          Y: 'a + postgis::Polygon<'a, ItemType=L, Iter=LI>,
+          YI: 'a + Iterator<Item=&'a Y> + ExactSizeIterator<Item=&'a Y>,
+          MY: 'a + postgis::MultiPolygon<'a, ItemType=Y, Iter=YI>,
+          G: 'a + postgis::Geometry<'a, Point=P, LineString=L, Polygon=Y, MultiPoint=MP, MultiLineString=ML, MultiPolygon=MY, GeometryCollection=GC>,
+          GI: 'a + Iterator<Item=&'a G> + ExactSizeIterator<Item=&'a G>,
+          GC: 'a + postgis::GeometryCollection<'a, ItemType=G, Iter=GI>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, stringify!(EwkbGeometry))?; //TODO
+        Ok(())
+    }
+}
+
+impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> EwkbWrite for EwkbGeometry<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>
+    where P: 'a + postgis::Point,
+          PI: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          MP: 'a + postgis::MultiPoint<'a, ItemType=P, Iter=PI>,
+          L: 'a + postgis::LineString<'a, ItemType=P, Iter=PI>,
+          LI: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
+          ML: 'a + postgis::MultiLineString<'a, ItemType=L, Iter=LI>,
+          Y: 'a + postgis::Polygon<'a, ItemType=L, Iter=LI>,
+          YI: 'a + Iterator<Item=&'a Y> + ExactSizeIterator<Item=&'a Y>,
+          MY: 'a + postgis::MultiPolygon<'a, ItemType=Y, Iter=YI>,
+          G: 'a + postgis::Geometry<'a, Point=P, LineString=L, Polygon=Y, MultiPoint=MP, MultiLineString=ML, MultiPolygon=MY, GeometryCollection=GC>,
+          GI: 'a + Iterator<Item=&'a G> + ExactSizeIterator<Item=&'a G>,
+          GC: 'a + postgis::GeometryCollection<'a, ItemType=G, Iter=GI>
+{
+    fn opt_srid(&self) -> Option<i32> {
+        match *self {
+            EwkbGeometry::Point(ref ewkb) => ewkb.opt_srid(),
+            EwkbGeometry::LineString(ref ewkb) => ewkb.opt_srid(),
+            EwkbGeometry::Polygon(ref ewkb) => ewkb.opt_srid(),
+            EwkbGeometry::MultiPoint(ref ewkb) => ewkb.opt_srid(),
+            EwkbGeometry::MultiLineString(ref ewkb) => ewkb.opt_srid(),
+            EwkbGeometry::MultiPolygon(ref ewkb) => ewkb.opt_srid(),
+            EwkbGeometry::GeometryCollection(ref ewkb) => ewkb.opt_srid(),
+        }
+    }
+
+    fn type_id(&self) -> u32 {
+        match *self {
+            EwkbGeometry::Point(ref ewkb) => ewkb.type_id(),
+            EwkbGeometry::LineString(ref ewkb) => ewkb.type_id(),
+            EwkbGeometry::Polygon(ref ewkb) => ewkb.type_id(),
+            EwkbGeometry::MultiPoint(ref ewkb) => ewkb.type_id(),
+            EwkbGeometry::MultiLineString(ref ewkb) => ewkb.type_id(),
+            EwkbGeometry::MultiPolygon(ref ewkb) => ewkb.type_id(),
+            EwkbGeometry::GeometryCollection(ref ewkb) => ewkb.type_id(),
+        }
+    }
+
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        match *self {
+            EwkbGeometry::Point(ref ewkb) => ewkb.write_ewkb_body(w),
+            EwkbGeometry::LineString(ref ewkb) => ewkb.write_ewkb_body(w),
+            EwkbGeometry::Polygon(ref ewkb) => ewkb.write_ewkb_body(w),
+            EwkbGeometry::MultiPoint(ref ewkb) => ewkb.write_ewkb_body(w),
+            EwkbGeometry::MultiLineString(ref ewkb) => ewkb.write_ewkb_body(w),
+            EwkbGeometry::MultiPolygon(ref ewkb) => ewkb.write_ewkb_body(w),
+            EwkbGeometry::GeometryCollection(ref ewkb) => ewkb.write_ewkb_body(w),
+        }
+    }
+}
+
+impl<'a, P> AsEwkbGeometry<'a> for GeometryT<P>
+    where P: 'a + postgis::Point + EwkbRead + AsEwkbPoint<'a>
+{
+    type PointType = P;
+    type PointIter = Iter<'a, P>;
+    type MultiPointType = MultiPointT<P>;
+    type LineType = LineStringT<P>;
+    type LineIter = Iter<'a, Self::LineType>;
+    type MultiLineType = MultiLineStringT<P>;
+    type PolyType = PolygonT<P>;
+    type PolyIter = Iter<'a, Self::PolyType>;
+    type MultiPolyType = MultiPolygonT<P>;
+    type GeomType = GeometryT<P>;
+    type GeomIter = Iter<'a, Self::GeomType>;
+    type GeomCollection = GeometryCollectionT<P>;
+    fn as_ewkb(&'a self) -> EwkbGeometry<'a, Self::PointType, Self::PointIter, Self::MultiPointType, Self::LineType, Self::LineIter, Self::MultiLineType, Self::PolyType, Self::PolyIter, Self::MultiPolyType, Self::GeomType, Self::GeomIter, Self::GeomCollection> {
+        match *self {
+            GeometryT::Point(ref geom) => EwkbGeometry::Point(geom.as_ewkb()),
+            GeometryT::LineString(ref geom) => EwkbGeometry::LineString(geom.as_ewkb()),
+            GeometryT::Polygon(ref geom) => EwkbGeometry::Polygon(geom.as_ewkb()),
+            GeometryT::MultiPoint(ref geom) => EwkbGeometry::MultiPoint(geom.as_ewkb()),
+            GeometryT::MultiLineString(ref geom) => EwkbGeometry::MultiLineString(geom.as_ewkb()),
+            GeometryT::MultiPolygon(ref geom) => EwkbGeometry::MultiPolygon(geom.as_ewkb()),
+            GeometryT::GeometryCollection(ref geom) => EwkbGeometry::GeometryCollection(geom.as_ewkb()),
+        }
+    }
+}
+
 /// OGC Geometry type
 pub type Geometry = GeometryT<Point>;
 /// OGC GeometryZ type
@@ -839,14 +1001,25 @@ pub type GeometryZM = GeometryT<PointZM>;
 
 #[derive(Clone, Debug)]
 pub struct GeometryCollectionT<P: postgis::Point + EwkbRead> {
-    pub geometries: Vec<GeometryT<P>>
+    pub geometries: Vec<GeometryT<P>>,
+    pub srid: Option<i32>,
 }
 
 impl<P> GeometryCollectionT<P>
     where P: postgis::Point + EwkbRead
 {
     pub fn new() -> GeometryCollectionT<P> {
-        GeometryCollectionT { geometries: Vec::new() }
+        GeometryCollectionT { geometries: Vec::new(), srid: None }
+    }
+}
+
+impl<'a, P> postgis::GeometryCollection<'a> for GeometryCollectionT<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type ItemType = GeometryT<P>;
+    type Iter = Iter<'a, Self::ItemType>;
+    fn geometries(&'a self) -> Self::Iter {
+        self.geometries.iter()
     }
 }
 
@@ -856,6 +1029,7 @@ impl<P> EwkbRead for GeometryCollectionT<P>
     fn point_type() -> PointType {
         P::point_type()
     }
+
     fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, _srid: Option<i32>) -> Result<Self, Error> {
         let mut ret = GeometryCollectionT::new();
         let size = read_u32(raw, is_be)? as usize;
@@ -880,6 +1054,142 @@ impl<P> EwkbRead for GeometryCollectionT<P>
             ret.geometries.push(geom);
         }
         Ok(ret)
+    }
+}
+
+pub struct EwkbGeometryCollection<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>
+    where P: 'a + postgis::Point,
+          PI: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          MP: 'a + postgis::MultiPoint<'a, ItemType=P, Iter=PI>,
+          L: 'a + postgis::LineString<'a, ItemType=P, Iter=PI>,
+          LI: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
+          ML: 'a + postgis::MultiLineString<'a, ItemType=L, Iter=LI>,
+          Y: 'a + postgis::Polygon<'a, ItemType=L, Iter=LI>,
+          YI: 'a + Iterator<Item=&'a Y> + ExactSizeIterator<Item=&'a Y>,
+          MY: 'a + postgis::MultiPolygon<'a, ItemType=Y, Iter=YI>,
+          G: 'a + postgis::Geometry<'a, Point=P, LineString=L, Polygon=Y, MultiPoint=MP, MultiLineString=ML, MultiPolygon=MY, GeometryCollection=GC>,
+          GI: 'a + Iterator<Item=&'a G> + ExactSizeIterator<Item=&'a G>,
+          GC: 'a + postgis::GeometryCollection<'a, ItemType=G, Iter=GI>
+{
+    pub geom: &'a postgis::GeometryCollection<'a, ItemType=G, Iter=GI>,
+    pub srid: Option<i32>,
+    pub point_type: PointType,
+}
+
+pub trait AsEwkbGeometryCollection<'a> {
+    type PointType: 'a + postgis::Point + EwkbRead;
+    type PointIter: Iterator<Item=&'a Self::PointType>+ExactSizeIterator<Item=&'a Self::PointType>;
+    type MultiPointType: 'a + postgis::MultiPoint<'a, ItemType=Self::PointType, Iter=Self::PointIter>;
+    type LineType: 'a + postgis::LineString<'a, ItemType=Self::PointType, Iter=Self::PointIter>;
+    type LineIter: Iterator<Item=&'a Self::LineType>+ExactSizeIterator<Item=&'a Self::LineType>;
+    type MultiLineType: 'a + postgis::MultiLineString<'a, ItemType=Self::LineType, Iter=Self::LineIter>;
+    type PolyType: 'a + postgis::Polygon<'a, ItemType=Self::LineType, Iter=Self::LineIter>;
+    type PolyIter: Iterator<Item=&'a Self::PolyType>+ExactSizeIterator<Item=&'a Self::PolyType>;
+    type MultiPolyType: 'a + postgis::MultiPolygon<'a, ItemType=Self::PolyType, Iter=Self::PolyIter>;
+    type GeomType: 'a + postgis::Geometry<'a, Point=Self::PointType, LineString=Self::LineType, Polygon=Self::PolyType, MultiPoint=Self::MultiPointType, MultiLineString=Self::MultiLineType, MultiPolygon=Self::MultiPolyType, GeometryCollection=Self::GeomCollection>;
+    type GeomIter: Iterator<Item=&'a Self::GeomType>+ExactSizeIterator<Item=&'a Self::GeomType>;
+    type GeomCollection: 'a + postgis::GeometryCollection<'a, ItemType=Self::GeomType, Iter=Self::GeomIter>;
+    fn as_ewkb(&'a self) -> EwkbGeometryCollection<'a, Self::PointType, Self::PointIter, Self::MultiPointType, Self::LineType, Self::LineIter, Self::MultiLineType, Self::PolyType, Self::PolyIter, Self::MultiPolyType, Self::GeomType, Self::GeomIter, Self::GeomCollection>;
+}
+
+impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> fmt::Debug for EwkbGeometryCollection<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>
+    where P: 'a + postgis::Point,
+          PI: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          MP: 'a + postgis::MultiPoint<'a, ItemType=P, Iter=PI>,
+          L: 'a + postgis::LineString<'a, ItemType=P, Iter=PI>,
+          LI: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
+          ML: 'a + postgis::MultiLineString<'a, ItemType=L, Iter=LI>,
+          Y: 'a + postgis::Polygon<'a, ItemType=L, Iter=LI>,
+          YI: 'a + Iterator<Item=&'a Y> + ExactSizeIterator<Item=&'a Y>,
+          MY: 'a + postgis::MultiPolygon<'a, ItemType=Y, Iter=YI>,
+          G: 'a + postgis::Geometry<'a, Point=P, LineString=L, Polygon=Y, MultiPoint=MP, MultiLineString=ML, MultiPolygon=MY, GeometryCollection=GC>,
+          GI: 'a + Iterator<Item=&'a G> + ExactSizeIterator<Item=&'a G>,
+          GC: 'a + postgis::GeometryCollection<'a, ItemType=G, Iter=GI>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, stringify!(EwkbGeometryCollection))?; //TODO
+        Ok(())
+    }
+}
+
+impl<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC> EwkbWrite for EwkbGeometryCollection<'a, P, PI, MP, L, LI, ML, Y, YI, MY, G, GI, GC>
+    where P: 'a + postgis::Point,
+          PI: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
+          MP: 'a + postgis::MultiPoint<'a, ItemType=P, Iter=PI>,
+          L: 'a + postgis::LineString<'a, ItemType=P, Iter=PI>,
+          LI: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
+          ML: 'a + postgis::MultiLineString<'a, ItemType=L, Iter=LI>,
+          Y: 'a + postgis::Polygon<'a, ItemType=L, Iter=LI>,
+          YI: 'a + Iterator<Item=&'a Y> + ExactSizeIterator<Item=&'a Y>,
+          MY: 'a + postgis::MultiPolygon<'a, ItemType=Y, Iter=YI>,
+          G: 'a + postgis::Geometry<'a, Point=P, LineString=L, Polygon=Y, MultiPoint=MP, MultiLineString=ML, MultiPolygon=MY, GeometryCollection=GC>,
+          GI: 'a + Iterator<Item=&'a G> + ExactSizeIterator<Item=&'a G>,
+          GC: 'a + postgis::GeometryCollection<'a, ItemType=G, Iter=GI>
+{
+    fn opt_srid(&self) -> Option<i32> {
+        self.srid
+    }
+
+    fn type_id(&self) -> u32 {
+        0x07 | Self::wkb_type_id(&self.point_type, self.srid)
+    }
+
+    fn write_ewkb_body<W: Write+?Sized>(&self, w: &mut W) -> Result<(), Error> {
+        w.write_u32::<LittleEndian>(self.geom.geometries().len() as u32)?;
+
+        for geom in self.geom.geometries() {
+            match geom.as_type() {
+                postgis::GeometryType::Point(geom) => {
+                    let wkb = EwkbPoint { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+                postgis::GeometryType::LineString(geom) => {
+                    let wkb = EwkbLineString { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+                postgis::GeometryType::Polygon(geom) => {
+                    let wkb = EwkbPolygon { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+                postgis::GeometryType::MultiPoint(geom) => {
+                    let wkb = EwkbMultiPoint { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+                postgis::GeometryType::MultiLineString(geom) => {
+                    let wkb = EwkbMultiLineString { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+                postgis::GeometryType::MultiPolygon(geom) => {
+                    let wkb = EwkbMultiPolygon { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+                postgis::GeometryType::GeometryCollection(geom) => {
+                    let wkb = EwkbGeometryCollection { geom: geom, srid: None, point_type: self.point_type.clone() };
+                    wkb.write_ewkb(w)?;
+                },
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a, P> AsEwkbGeometryCollection<'a> for GeometryCollectionT<P>
+    where P: 'a + postgis::Point + EwkbRead
+{
+    type PointType = P;
+    type PointIter = Iter<'a, P>;
+    type MultiPointType = MultiPointT<P>;
+    type LineType = LineStringT<P>;
+    type LineIter = Iter<'a, Self::LineType>;
+    type MultiLineType = MultiLineStringT<P>;
+    type PolyType = PolygonT<P>;
+    type PolyIter = Iter<'a, Self::PolyType>;
+    type MultiPolyType = MultiPolygonT<P>;
+    type GeomType = GeometryT<P>;
+    type GeomIter = Iter<'a, Self::GeomType>;
+    type GeomCollection = GeometryCollectionT<P>;
+    fn as_ewkb(&'a self) -> EwkbGeometryCollection<'a, Self::PointType, Self::PointIter, Self::MultiPointType, Self::LineType, Self::LineIter, Self::MultiLineType, Self::PolyType, Self::PolyIter, Self::MultiPolyType, Self::GeomType, Self::GeomIter, Self::GeomCollection> {
+        EwkbGeometryCollection { geom: self, srid: self.srid, point_type: P::point_type() }
     }
 }
 
@@ -1084,7 +1394,7 @@ fn test_geometrycollection_read() {
     // SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry
     let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
     let geom = GeometryCollectionT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] }");
+    assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None }");
 }
 
 #[test]
@@ -1116,7 +1426,7 @@ fn test_geometry_read() {
     // SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry
     let ewkb = hex_to_vec("01070000000300000001010000000000000000002440000000000000244001010000000000000000003E400000000000003E400102000000020000000000000000002E400000000000002E4000000000000034400000000000003440");
     let geom = GeometryT::<Point>::read_ewkb(&mut ewkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", geom), "GeometryCollection(GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })] })");
+    assert_eq!(format!("{:?}", geom), "GeometryCollection(GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None })");
 }
 
 #[test]
