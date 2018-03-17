@@ -18,7 +18,7 @@ struct Converter {
     casm_y1: f64,
     casm_x2: f64,
     casm_y2: f64,
-    casm_f: f64
+    casm_f: f64,
 }
 
 fn yj_sin2(x: f64) -> f64 {
@@ -62,25 +62,36 @@ fn yj_sin2(x: f64) -> f64 {
 }
 
 fn transform_yj5(x: f64, y: f64) -> f64 {
-    let mut tt: f64 = 300.0 + 1.0 * x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * (x * x).sqrt().sqrt();
-    tt = tt + (20.0 * yj_sin2(18.849555921538764 * x) + 20.0 * yj_sin2(6.283185307179588 * x)) * 0.6667;
-    tt = tt + (20.0 * yj_sin2(3.141592653589794 * x) + 40.0 * yj_sin2(1.047197551196598 * x)) * 0.6667;
-    tt = tt + (150.0 * yj_sin2(0.2617993877991495 * x) + 300.0 * yj_sin2(0.1047197551196598 * x)) * 0.6667;
+    let mut tt: f64 =
+        300.0 + 1.0 * x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * (x * x).sqrt().sqrt();
+    tt = tt
+        + (20.0 * yj_sin2(18.849555921538764 * x) + 20.0 * yj_sin2(6.283185307179588 * x)) * 0.6667;
+    tt = tt
+        + (20.0 * yj_sin2(3.141592653589794 * x) + 40.0 * yj_sin2(1.047197551196598 * x)) * 0.6667;
+    tt = tt
+        + (150.0 * yj_sin2(0.2617993877991495 * x) + 300.0 * yj_sin2(0.1047197551196598 * x))
+            * 0.6667;
     tt
 }
 
 fn transform_yjy5(x: f64, y: f64) -> f64 {
-    let mut tt = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * (x * x).sqrt().sqrt();
-    tt = tt + (20.0 * yj_sin2(18.849555921538764 * x) + 20.0 * yj_sin2(6.283185307179588 * x)) * 0.6667;
-    tt = tt + (20.0 * yj_sin2(3.141592653589794 * y) + 40.0 * yj_sin2(1.047197551196598 * y)) * 0.6667;
-    tt = tt + (160.0 * yj_sin2(0.2617993877991495 * y) + 320.0 * yj_sin2(0.1047197551196598 * y)) * 0.6667;
+    let mut tt =
+        -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * (x * x).sqrt().sqrt();
+    tt = tt
+        + (20.0 * yj_sin2(18.849555921538764 * x) + 20.0 * yj_sin2(6.283185307179588 * x)) * 0.6667;
+    tt = tt
+        + (20.0 * yj_sin2(3.141592653589794 * y) + 40.0 * yj_sin2(1.047197551196598 * y)) * 0.6667;
+    tt = tt
+        + (160.0 * yj_sin2(0.2617993877991495 * y) + 320.0 * yj_sin2(0.1047197551196598 * y))
+            * 0.6667;
     tt
 }
 
 fn transform_jy5(x: f64, xx: f64) -> f64 {
     let a: f64 = 6378245.0;
     let e: f64 = 0.00669342;
-    let n: f64 = (1.0 - e * yj_sin2(x * 0.0174532925199433) * yj_sin2(x * 0.0174532925199433)).sqrt();
+    let n: f64 =
+        (1.0 - e * yj_sin2(x * 0.0174532925199433) * yj_sin2(x * 0.0174532925199433)).sqrt();
     (xx * 180.0) / (a / n * (x * 0.0174532925199433).cos() * 3.1415926)
 }
 
@@ -94,8 +105,16 @@ fn transform_jyj5(x: f64, yy: f64) -> f64 {
 
 impl Converter {
     pub fn new() -> Converter {
-        Converter { casm_rr: 0.0, casm_t1: 0.0, casm_t2: 0.0, casm_x1: 0.0, casm_y1: 0.0,
-                    casm_x2: 0.0, casm_y2: 0.0, casm_f: 0.0 }
+        Converter {
+            casm_rr: 0.0,
+            casm_t1: 0.0,
+            casm_t2: 0.0,
+            casm_x1: 0.0,
+            casm_y1: 0.0,
+            casm_x2: 0.0,
+            casm_y2: 0.0,
+            casm_f: 0.0,
+        }
     }
 
     fn random_yj(&mut self) -> f64 {
@@ -122,12 +141,16 @@ impl Converter {
         self.casm_y2 = w_lat;
         self.casm_f = 3.0;
     }
-
-
 }
 
-
-fn wgtochina_lb(wg_flag: i32, wg_lng: i32, wg_lat: i32, wg_heit: i32, _wg_week: i32, wg_time: i32) -> (f64, f64) {
+fn wgtochina_lb(
+    wg_flag: i32,
+    wg_lng: i32,
+    wg_lat: i32,
+    wg_heit: i32,
+    _wg_week: i32,
+    wg_time: i32,
+) -> (f64, f64) {
     let mut point: (f64, f64) = (wg_lng as f64, wg_lat as f64);
 
     let x1_x2: f64;
@@ -215,7 +238,14 @@ pub fn from_wgs84(x: f64, y: f64) -> (f64, f64) {
     let gps_week_time = 0;
     let gps_height = 0;
 
-    let point = wgtochina_lb(1, x1 as i32, y1 as i32, gps_height as i32, gps_week as i32, gps_week_time as i32);
+    let point = wgtochina_lb(
+        1,
+        x1 as i32,
+        y1 as i32,
+        gps_height as i32,
+        gps_week as i32,
+        gps_week_time as i32,
+    );
     let mut tempx = point.0;
     let mut tempy = point.1;
     tempx = tempx / 3686400.0;
@@ -228,14 +258,22 @@ pub fn from_wgs84(x: f64, y: f64) -> (f64, f64) {
 pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
     // TODO: figure out if it is in China
     let epsilon: f64 = 0.00001;
-    fn bisection_find_vals(x: f64, y: f64, x0: f64, y0: f64, x1: f64, y1: f64, epsilon: f64) -> (f64, f64) {
+    fn bisection_find_vals(
+        x: f64,
+        y: f64,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        epsilon: f64,
+    ) -> (f64, f64) {
         let (mut x0, mut y0, mut x1, mut y1) = (x0, y0, x1, y1);
         let (mut x_, mut y_): (f64, f64);
 
         loop {
             x_ = (x0 + x1) / 2.0;
             y_ = (y0 + y1) / 2.0;
-            let (x_e, y_e)   = from_wgs84(x_, y_);
+            let (x_e, y_e) = from_wgs84(x_, y_);
 
             // println!("x0: {}, y0: {}, x1: {}, y1: {}", x0, y0, x1, y1);
             // println!("target => {:?}         {:?}", (x,y), (x_e, y_e));
@@ -252,7 +290,7 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
 
             if x < x_e0 {
                 //x1 = x0;
-                x0 -= x_e0 - x;  // instead of 0.5
+                x0 -= x_e0 - x; // instead of 0.5
             } else if x > x_e1 {
                 //x0 = x1;
                 x1 += x - x_e1;
@@ -291,11 +329,10 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
                 x0 = x0 - x0 * 0.01;
                 x1 = x1 + x1 * 0.01;
             }
-            if y1 - y0 < epsilon * 0.1{
+            if y1 - y0 < epsilon * 0.1 {
                 y0 = y0 - y0 * 0.01;
                 y1 = y1 + y1 * 0.01;
             }
-
         }
         //        bisection_find_vals(x, y, x_0, y_0, x_1, y_1, epsilon)
         (x_, y_)
@@ -304,20 +341,26 @@ pub fn to_wgs84(x: f64, y: f64) -> (f64, f64) {
     bisection_find_vals(x, y, x - 0.1, y - 0.1, x + 0.1, y + 0.1, epsilon)
 }
 
-
 impl ewkb::Point {
     pub fn new_wgs84(x: f64, y: f64) -> ewkb::Point {
-        ewkb::Point {x: x, y: y, srid: Some(4326)}
+        ewkb::Point {
+            x: x,
+            y: y,
+            srid: Some(4326),
+        }
     }
     pub fn from_gcj02(x: f64, y: f64) -> ewkb::Point {
         let (x0, y0) = to_wgs84(x, y);
-        ewkb::Point {x: x0, y: y0, srid: Some(4326)}
+        ewkb::Point {
+            x: x0,
+            y: y0,
+            srid: Some(4326),
+        }
     }
     pub fn to_gcj02(&self) -> (f64, f64) {
         from_wgs84(self.x, self.y)
     }
 }
-
 
 #[test]
 fn test_mars_to_wgs84() {

@@ -27,12 +27,10 @@ use std::slice::Iter;
 use byteorder::ReadBytesExt;
 use error::Error;
 
-
 #[derive(PartialEq, Clone, Debug)]
 pub struct Point {
     pub x: f64,
-    pub y: f64
-    // TODO: support for z, m
+    pub y: f64, // TODO: support for z, m
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -64,7 +62,7 @@ pub struct MultiPolygon {
 }
 
 #[doc(hidden)]
-#[derive(Default,Debug)]
+#[derive(Default, Debug)]
 pub struct TwkbInfo {
     geom_type: u8,
     precision: i8,
@@ -125,9 +123,14 @@ pub trait TwkbGeom: fmt::Debug + Sized {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error>;
 
     #[doc(hidden)]
-    fn read_relative_point<R: Read>(raw: &mut R, twkb_info: &TwkbInfo, x: f64, y: f64, z: Option<f64>, m: Option<f64>)
-        -> Result<(f64, f64, Option<f64>, Option<f64>), Error>
-    {
+    fn read_relative_point<R: Read>(
+        raw: &mut R,
+        twkb_info: &TwkbInfo,
+        x: f64,
+        y: f64,
+        z: Option<f64>,
+        m: Option<f64>,
+    ) -> Result<(f64, f64, Option<f64>, Option<f64>), Error> {
         let x2 = x + read_varint64_as_f64(raw, twkb_info.precision)?;
         let y2 = y + read_varint64_as_f64(raw, twkb_info.precision)?;
         let z2 = if twkb_info.has_z {
@@ -145,8 +148,7 @@ pub trait TwkbGeom: fmt::Debug + Sized {
         Ok((x2, y2, z2, m2))
     }
 
-    fn read_idlist<R: Read>(raw: &mut R, size: usize) -> Result<Vec<u64>, Error>
-    {
+    fn read_idlist<R: Read>(raw: &mut R, size: usize) -> Result<Vec<u64>, Error> {
         let mut idlist = Vec::new();
         idlist.reserve(size);
         for _ in 0..size {
@@ -232,15 +234,18 @@ impl TwkbGeom for Point {
             None
         };
         Ok(Self::new_from_opt_vals(x, y, z, m))
-    }    
+    }
 }
 
 impl<'a> ewkb::AsEwkbPoint<'a> for Point {
     fn as_ewkb(&'a self) -> ewkb::EwkbPoint<'a> {
-        ewkb::EwkbPoint { geom: self, srid: None, point_type: ewkb::PointType::Point }
+        ewkb::EwkbPoint {
+            geom: self,
+            srid: None,
+            point_type: ewkb::PointType::Point,
+        }
     }
 }
-
 
 impl TwkbGeom for LineString {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -257,10 +262,13 @@ impl TwkbGeom for LineString {
             for _ in 0..npoints {
                 let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
-                x = x2; y = y2; z = z2; m = m2;
+                x = x2;
+                y = y2;
+                z = z2;
+                m = m2;
             }
         }
-        Ok(LineString {points: points})
+        Ok(LineString { points: points })
     }
 }
 
@@ -276,10 +284,13 @@ impl<'a> ewkb::AsEwkbLineString<'a> for LineString {
     type PointType = Point;
     type Iter = Iter<'a, Point>;
     fn as_ewkb(&'a self) -> ewkb::EwkbLineString<'a, Self::PointType, Self::Iter> {
-        ewkb::EwkbLineString { geom: self, srid: None, point_type: ewkb::PointType::Point }
+        ewkb::EwkbLineString {
+            geom: self,
+            srid: None,
+            point_type: ewkb::PointType::Point,
+        }
     }
 }
-
 
 impl TwkbGeom for Polygon {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -304,15 +315,18 @@ impl TwkbGeom for Polygon {
             for _ in 0..npoints {
                 let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
-                x = x2; y = y2; z = z2; m = m2;
+                x = x2;
+                y = y2;
+                z = z2;
+                m = m2;
             }
             // close ring, if necessary
             if x != x0 && y != y0 && z != z0 && m != m0 {
                 points.push(Point::new_from_opt_vals(x0, y0, z0, m0));
             }
-            rings.push(LineString {points: points});
+            rings.push(LineString { points: points });
         }
-        Ok(Polygon {rings: rings})
+        Ok(Polygon { rings: rings })
     }
 }
 
@@ -329,11 +343,16 @@ impl<'a> ewkb::AsEwkbPolygon<'a> for Polygon {
     type PointIter = Iter<'a, Point>;
     type ItemType = LineString;
     type Iter = Iter<'a, Self::ItemType>;
-    fn as_ewkb(&'a self) -> ewkb::EwkbPolygon<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
-        ewkb::EwkbPolygon { geom: self, srid: None, point_type: ewkb::PointType::Point }
+    fn as_ewkb(
+        &'a self,
+    ) -> ewkb::EwkbPolygon<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
+        ewkb::EwkbPolygon {
+            geom: self,
+            srid: None,
+            point_type: ewkb::PointType::Point,
+        }
     }
 }
-
 
 impl TwkbGeom for MultiPoint {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -358,10 +377,16 @@ impl TwkbGeom for MultiPoint {
             for _ in 0..npoints {
                 let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
-                x = x2; y = y2; z = z2; m = m2;
+                x = x2;
+                y = y2;
+                z = z2;
+                m = m2;
             }
         }
-        Ok(MultiPoint {points: points, ids: ids})
+        Ok(MultiPoint {
+            points: points,
+            ids: ids,
+        })
     }
 }
 
@@ -377,10 +402,13 @@ impl<'a> ewkb::AsEwkbMultiPoint<'a> for MultiPoint {
     type PointType = Point;
     type Iter = Iter<'a, Point>;
     fn as_ewkb(&'a self) -> ewkb::EwkbMultiPoint<'a, Self::PointType, Self::Iter> {
-        ewkb::EwkbMultiPoint { geom: self, srid: None, point_type: ewkb::PointType::Point }
+        ewkb::EwkbMultiPoint {
+            geom: self,
+            srid: None,
+            point_type: ewkb::PointType::Point,
+        }
     }
 }
-
 
 impl TwkbGeom for MultiLineString {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -412,11 +440,17 @@ impl TwkbGeom for MultiLineString {
             for _ in 0..npoints {
                 let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                 points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
-                x = x2; y = y2; z = z2; m = m2;
+                x = x2;
+                y = y2;
+                z = z2;
+                m = m2;
             }
-            lines.push(LineString {points: points});
+            lines.push(LineString { points: points });
         }
-        Ok(MultiLineString {lines: lines, ids: ids})
+        Ok(MultiLineString {
+            lines: lines,
+            ids: ids,
+        })
     }
 }
 
@@ -433,11 +467,17 @@ impl<'a> ewkb::AsEwkbMultiLineString<'a> for MultiLineString {
     type PointIter = Iter<'a, Point>;
     type ItemType = LineString;
     type Iter = Iter<'a, Self::ItemType>;
-    fn as_ewkb(&'a self) -> ewkb::EwkbMultiLineString<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter> {
-        ewkb::EwkbMultiLineString { geom: self, srid: None, point_type: ewkb::PointType::Point }
+    fn as_ewkb(
+        &'a self,
+    ) -> ewkb::EwkbMultiLineString<'a, Self::PointType, Self::PointIter, Self::ItemType, Self::Iter>
+    {
+        ewkb::EwkbMultiLineString {
+            geom: self,
+            srid: None,
+            point_type: ewkb::PointType::Point,
+        }
     }
 }
-
 
 impl TwkbGeom for MultiPolygon {
     fn read_twkb_body<R: Read>(raw: &mut R, twkb_info: &TwkbInfo) -> Result<Self, Error> {
@@ -476,17 +516,23 @@ impl TwkbGeom for MultiPolygon {
                 for _ in 0..npoints {
                     let (x2, y2, z2, m2) = Self::read_relative_point(raw, twkb_info, x, y, z, m)?;
                     points.push(Point::new_from_opt_vals(x2, y2, z2, m2));
-                    x = x2; y = y2; z = z2; m = m2;
+                    x = x2;
+                    y = y2;
+                    z = z2;
+                    m = m2;
                 }
                 // close ring, if necessary
                 if x != x0 && y != y0 && z != z0 && m != m0 {
                     points.push(Point::new_from_opt_vals(x0, y0, z0, m0));
                 }
-                rings.push(LineString {points: points});
+                rings.push(LineString { points: points });
             }
-            polygons.push(Polygon {rings: rings});
+            polygons.push(Polygon { rings: rings });
         }
-        Ok(MultiPolygon {polygons: polygons, ids: ids})
+        Ok(MultiPolygon {
+            polygons: polygons,
+            ids: ids,
+        })
     }
 }
 
@@ -505,16 +551,31 @@ impl<'a> ewkb::AsEwkbMultiPolygon<'a> for MultiPolygon {
     type LineIter = Iter<'a, Self::LineType>;
     type ItemType = Polygon;
     type Iter = Iter<'a, Self::ItemType>;
-    fn as_ewkb(&'a self) -> ewkb::EwkbMultiPolygon<'a, Self::PointType, Self::PointIter, Self::LineType, Self::LineIter, Self::ItemType, Self::Iter> {
-        ewkb::EwkbMultiPolygon { geom: self, srid: None, point_type: ewkb::PointType::Point }
+    fn as_ewkb(
+        &'a self,
+    ) -> ewkb::EwkbMultiPolygon<
+        'a,
+        Self::PointType,
+        Self::PointIter,
+        Self::LineType,
+        Self::LineIter,
+        Self::ItemType,
+        Self::Iter,
+    > {
+        ewkb::EwkbMultiPolygon {
+            geom: self,
+            srid: None,
+            point_type: ewkb::PointType::Point,
+        }
     }
 }
 
+#[cfg(test)]
+use ewkb::{AsEwkbLineString, AsEwkbMultiLineString, AsEwkbMultiPoint, AsEwkbMultiPolygon,
+           AsEwkbPoint, AsEwkbPolygon, EwkbWrite};
 
 #[cfg(test)]
-use ewkb::{EwkbWrite, AsEwkbPoint, AsEwkbLineString, AsEwkbPolygon, AsEwkbMultiPoint, AsEwkbMultiLineString, AsEwkbMultiPolygon};
-
-#[cfg(test)]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn hex_to_vec(hexstr: &str) -> Vec<u8> {
     hexstr.as_bytes().chunks(2).map(|chars| {
         let hb = if chars[0] <= 57 { chars[0] - 48 } else { chars[0] - 87 };
@@ -524,6 +585,7 @@ fn hex_to_vec(hexstr: &str) -> Vec<u8> {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_read_point() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -551,6 +613,7 @@ fn test_read_point() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_read_line() {
     let twkb = hex_to_vec("02000214271326"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -566,6 +629,7 @@ fn test_read_line() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_read_polygon() {
     let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
     let poly = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -573,6 +637,7 @@ fn test_read_polygon() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_read_multipoint() {
     let twkb = hex_to_vec("04000214271326"); // SELECT encode(ST_AsTWKB('MULTIPOINT ((10 -20), (0 -0.5))'::geometry), 'hex')
     let points = MultiPoint::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -580,6 +645,7 @@ fn test_read_multipoint() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_read_multiline() {
     let twkb = hex_to_vec("05000202142713260200020400"); // SELECT encode(ST_AsTWKB('MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry), 'hex')
     let lines = MultiLineString::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -587,6 +653,7 @@ fn test_read_multiline() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_read_multipolygon() {
     let twkb = hex_to_vec("060002010500000400000403000003010514141700001718000018"); // SELECT encode(ST_AsTWKB('MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry), 'hex')
     let polys = MultiPolygon::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -594,6 +661,7 @@ fn test_read_multipolygon() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_write_point() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -602,6 +670,7 @@ fn test_write_point() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_write_line() {
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -610,6 +679,7 @@ fn test_write_line() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_write_polygon() {
     let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
     let polygon = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -618,6 +688,7 @@ fn test_write_polygon() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_write_multipoint() {
     let twkb = hex_to_vec("04000214271326"); // SELECT encode(ST_AsTWKB('MULTIPOINT ((10 -20), (0 -0.5))'::geometry), 'hex')
     let multipoint = MultiPoint::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -628,6 +699,7 @@ fn test_write_multipoint() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_write_multiline() {
     let twkb = hex_to_vec("05000202142713260200020400"); // SELECT encode(ST_AsTWKB('MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry), 'hex')
     let multiline = MultiLineString::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -638,6 +710,7 @@ fn test_write_multiline() {
 }
 
 #[test]
+#[cfg_attr(rustfmt, rustfmt_skip)]
 fn test_write_multipoly() {
     let twkb = hex_to_vec("060002010500000400000403000003010514141700001718000018"); // SELECT encode(ST_AsTWKB('MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry), 'hex')
     let multipoly = MultiPolygon::read_twkb(&mut twkb.as_slice()).unwrap();

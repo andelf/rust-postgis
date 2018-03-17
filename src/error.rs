@@ -8,11 +8,11 @@
 use std;
 use std::fmt;
 
-#[derive(Debug, )]
+#[derive(Debug)]
 pub enum Error {
     Read(String),
     Write(String),
-    Other(String)
+    Other(String),
 }
 
 impl fmt::Display for Error {
@@ -24,9 +24,9 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn description(&self) -> &str {
         match *self {
-            Error::Read(_)  => "postgis error while reading",
+            Error::Read(_) => "postgis error while reading",
             Error::Write(_) => "postgis error while writing",
-            Error::Other(_) => "postgis unknown error"
+            Error::Other(_) => "postgis unknown error",
         }
     }
 }
