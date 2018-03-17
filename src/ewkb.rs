@@ -1434,8 +1434,7 @@ fn test_read_error() {
     // SELECT 'LINESTRING (10 -20, 0 -0.5)'::geometry
     let ewkb = hex_to_vec("010200000002000000000000000000244000000000000034C00000000000000000000000000000E0BF");
     let poly = PolygonT::<Point>::read_ewkb(&mut ewkb.as_slice());
-    assert!(poly.is_err());
-    assert_eq!(format!("{:?}", poly), "Err(Read(\"error while reading: Error { repr: Custom(Custom { kind: UnexpectedEof, error: StringError(\\\"failed to fill whole buffer\\\") }) }\"))");
+    assert!(poly.is_err()); // UnexpectedEof "failed to fill whole buffer"
 }
 
 #[test]
