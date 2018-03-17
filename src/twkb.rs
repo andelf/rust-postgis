@@ -527,19 +527,19 @@ fn hex_to_vec(hexstr: &str) -> Vec<u8> {
 fn test_read_point() {
     let twkb = hex_to_vec("01001427"); // SELECT encode(ST_AsTWKB('POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point), "Point { x: 10, y: -20 }");
+    assert_eq!(format!("{:.0?}", point), "Point { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("0108011427c601"); // SELECT encode(ST_AsTWKB('POINT(10 -20 99)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point), "Point { x: 10, y: -20 }");
+    assert_eq!(format!("{:.0?}", point), "Point { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("2100ca019503"); // SELECT encode(ST_AsTWKB('POINT(10.12 -20.34)'::geometry, 1), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point), "Point { x: 10.1, y: -20.3 }");
+    assert_eq!(format!("{:.1?}", point), "Point { x: 10.1, y: -20.3 }");
 
     let twkb = hex_to_vec("11000203"); // SELECT encode(ST_AsTWKB('POINT(11.12 -22.34)'::geometry, -1), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point), "Point { x: 10, y: -20 }");
+    assert_eq!(format!("{:.0?}", point), "Point { x: 10, y: -20 }");
 
     let twkb = hex_to_vec("0110"); // SELECT encode(ST_AsTWKB('POINT EMPTY'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -547,18 +547,18 @@ fn test_read_point() {
 
     let twkb = hex_to_vec("a10080897aff91f401"); // SELECT encode(ST_AsTWKB('SRID=4326;POINT(10 -20)'::geometry), 'hex')
     let point = Point::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", point), "Point { x: 10, y: -20 }");
+    assert_eq!(format!("{:.0?}", point), "Point { x: 10, y: -20 }");
 }
 
 #[test]
 fn test_read_line() {
     let twkb = hex_to_vec("02000214271326"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line), "LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }] }");
+    assert_eq!(format!("{:.0?}", line), "LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }] }");
 
     let twkb = hex_to_vec("220002c8018f03c7018603"); // SELECT encode(ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", line), "LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -0.5 }] }");
+    assert_eq!(format!("{:.1?}", line), "LineString { points: [Point { x: 10.0, y: -20.0 }, Point { x: 0.0, y: -0.5 }] }");
 
     let twkb = hex_to_vec("0210"); // SELECT encode(ST_AsTWKB('LINESTRING EMPTY'::geometry), 'hex')
     let line = LineString::read_twkb(&mut twkb.as_slice()).unwrap();
@@ -569,28 +569,28 @@ fn test_read_line() {
 fn test_read_polygon() {
     let twkb = hex_to_vec("03000205000004000004030000030514141700001718000018"); // SELECT encode(ST_AsTWKB('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0),(10 10, -2 10, -2 -2, 10 -2, 10 10))'::geometry), 'hex')
     let poly = Polygon::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", poly), "Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }, LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }");
+    assert_eq!(format!("{:.0?}", poly), "Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }, LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }");
 }
 
 #[test]
 fn test_read_multipoint() {
     let twkb = hex_to_vec("04000214271326"); // SELECT encode(ST_AsTWKB('MULTIPOINT ((10 -20), (0 -0.5))'::geometry), 'hex')
     let points = MultiPoint::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", points), "MultiPoint { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }], ids: None }");
+    assert_eq!(format!("{:.0?}", points), "MultiPoint { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }], ids: None }");
 }
 
 #[test]
 fn test_read_multiline() {
     let twkb = hex_to_vec("05000202142713260200020400"); // SELECT encode(ST_AsTWKB('MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry), 'hex')
     let lines = MultiLineString::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", lines), "MultiLineString { lines: [LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }] }, LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }] }], ids: None }");
+    assert_eq!(format!("{:.0?}", lines), "MultiLineString { lines: [LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -1 }] }, LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }] }], ids: None }");
 }
 
 #[test]
 fn test_read_multipolygon() {
     let twkb = hex_to_vec("060002010500000400000403000003010514141700001718000018"); // SELECT encode(ST_AsTWKB('MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry), 'hex')
     let polys = MultiPolygon::read_twkb(&mut twkb.as_slice()).unwrap();
-    assert_eq!(format!("{:?}", polys), "MultiPolygon { polygons: [Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }] }, Polygon { rings: [LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }], ids: None }");
+    assert_eq!(format!("{:.0?}", polys), "MultiPolygon { polygons: [Polygon { rings: [LineString { points: [Point { x: 0, y: 0 }, Point { x: 2, y: 0 }, Point { x: 2, y: 2 }, Point { x: 0, y: 2 }, Point { x: 0, y: 0 }] }] }, Polygon { rings: [LineString { points: [Point { x: 10, y: 10 }, Point { x: -2, y: 10 }, Point { x: -2, y: -2 }, Point { x: 10, y: -2 }, Point { x: 10, y: 10 }] }] }], ids: None }");
 }
 
 #[test]

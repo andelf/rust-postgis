@@ -519,7 +519,7 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry", &[]));
         let poly = result.iter().map(|r| r.get::<_, ewkb::Polygon>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", poly), "PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: Some(4326) }, Point { x: 2, y: 0, srid: Some(4326) }, Point { x: 2, y: 2, srid: Some(4326) }, Point { x: 0, y: 2, srid: Some(4326) }, Point { x: 0, y: 0, srid: Some(4326) }], srid: Some(4326) }], srid: Some(4326) }");
+        assert_eq!(format!("{:.0?}", poly), "PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: Some(4326) }, Point { x: 2, y: 0, srid: Some(4326) }, Point { x: 2, y: 2, srid: Some(4326) }, Point { x: 0, y: 2, srid: Some(4326) }, Point { x: 0, y: 0, srid: Some(4326) }], srid: Some(4326) }], srid: Some(4326) }");
     }
 
     #[test]
@@ -528,7 +528,7 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;MULTIPOINT ((10 -20 100), (0 -0.5 101))'::geometry", &[]));
         let points = result.iter().map(|r| r.get::<_, ewkb::MultiPointZ>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", points), "MultiPointT { points: [PointZ { x: 10, y: -20, z: 100, srid: None }, PointZ { x: 0, y: -0.5, z: 101, srid: None }], srid: Some(4326) }");
+        assert_eq!(format!("{:.1?}", points), "MultiPointT { points: [PointZ { x: 10.0, y: -20.0, z: 100.0, srid: None }, PointZ { x: 0.0, y: -0.5, z: 101.0, srid: None }], srid: Some(4326) }");
     }
 
     #[test]
@@ -537,7 +537,7 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry", &[]));
         let multiline = result.iter().map(|r| r.get::<_, ewkb::MultiLineString>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", multiline), "MultiLineStringT { lines: [LineStringT { points: [Point { x: 10, y: -20, srid: None }, Point { x: 0, y: -0.5, srid: None }], srid: None }, LineStringT { points: [Point { x: 0, y: 0, srid: None }, Point { x: 2, y: 0, srid: None }], srid: None }], srid: Some(4326) }");
+        assert_eq!(format!("{:.1?}", multiline), "MultiLineStringT { lines: [LineStringT { points: [Point { x: 10.0, y: -20.0, srid: None }, Point { x: 0.0, y: -0.5, srid: None }], srid: None }, LineStringT { points: [Point { x: 0.0, y: 0.0, srid: None }, Point { x: 2.0, y: 0.0, srid: None }], srid: None }], srid: Some(4326) }");
     }
 
     #[test]
@@ -546,7 +546,7 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry", &[]));
         let multipoly = result.iter().map(|r| r.get::<_, ewkb::MultiPolygon>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", multipoly), "MultiPolygonT { polygons: [PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: None }, Point { x: 2, y: 0, srid: None }, Point { x: 2, y: 2, srid: None }, Point { x: 0, y: 2, srid: None }, Point { x: 0, y: 0, srid: None }], srid: None }], srid: None }, PolygonT { rings: [LineStringT { points: [Point { x: 10, y: 10, srid: None }, Point { x: -2, y: 10, srid: None }, Point { x: -2, y: -2, srid: None }, Point { x: 10, y: -2, srid: None }, Point { x: 10, y: 10, srid: None }], srid: None }], srid: None }], srid: Some(4326) }");
+        assert_eq!(format!("{:.0?}", multipoly), "MultiPolygonT { polygons: [PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: None }, Point { x: 2, y: 0, srid: None }, Point { x: 2, y: 2, srid: None }, Point { x: 0, y: 2, srid: None }, Point { x: 0, y: 0, srid: None }], srid: None }], srid: None }, PolygonT { rings: [LineStringT { points: [Point { x: 10, y: 10, srid: None }, Point { x: -2, y: 10, srid: None }, Point { x: -2, y: -2, srid: None }, Point { x: 10, y: -2, srid: None }, Point { x: 10, y: 10, srid: None }], srid: None }], srid: None }], srid: Some(4326) }");
     }
 
     #[test]
@@ -555,7 +555,7 @@ mod tests {
         let conn = connect();
         let result = or_panic!(conn.query("SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry", &[]));
         let geom = result.iter().map(|r| r.get::<_, ewkb::GeometryCollection>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None }");
+        assert_eq!(format!("{:.0?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None }");
     }
 
     #[test]
@@ -566,7 +566,7 @@ mod tests {
         or_panic!(conn.execute("INSERT INTO geomtests VALUES('SRID=4326;POINT(10 -20 99)'::geometry)", &[]));
         let result = or_panic!(conn.query("SELECT geom FROM geomtests", &[]));
         let geom = result.iter().map(|r| r.get::<_, ewkb::GeometryZ>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", geom), "Point(PointZ { x: 10, y: -20, z: 99, srid: Some(4326) })");
+        assert_eq!(format!("{:.0?}", geom), "Point(PointZ { x: 10, y: -20, z: 99, srid: Some(4326) })");
     }
 
     #[test]
@@ -602,7 +602,7 @@ mod tests {
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
         let line = result.iter().map(|r| r.get::<_, twkb::LineString>(0)).last().unwrap();
-        assert_eq!(&format!("{:?}", line), "LineString { points: [Point { x: 10, y: -20 }, Point { x: 0, y: -0.5 }] }");
+        assert_eq!(&format!("{:.1?}", line), "LineString { points: [Point { x: 10.0, y: -20.0 }, Point { x: 0.0, y: -0.5 }] }");
     }
 
     #[test]
