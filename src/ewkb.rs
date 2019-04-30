@@ -863,13 +863,13 @@ where
         &'a self,
     ) -> postgis::GeometryType<
         'a,
-        Self::Point,
-        Self::LineString,
-        Self::Polygon,
-        Self::MultiPoint,
-        Self::MultiLineString,
-        Self::MultiPolygon,
-        Self::GeometryCollection,
+        P,
+        LineStringT<P>,
+        PolygonT<P>,
+        MultiPointT<P>,
+        MultiLineStringT<P>,
+        MultiPolygonT<P>,
+        GeometryCollectionT<P>,
     > {
         use ewkb::GeometryT as A;
         use types::GeometryType as B;
