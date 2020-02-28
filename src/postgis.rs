@@ -2,29 +2,33 @@
 // Copyright (c) ShuYu Wang <andelf@gmail.com>, Feather Workshop and Pirmin Kalberer. All rights reserved.
 //
 
-use types::{LineString, Point, Polygon};
-use ewkb::{self, AsEwkbGeometry, AsEwkbGeometryCollection, AsEwkbLineString,
-           AsEwkbMultiLineString, AsEwkbMultiPoint, AsEwkbMultiPolygon, AsEwkbPoint,
-           AsEwkbPolygon, EwkbRead, EwkbWrite};
-use twkb::{self, TwkbGeom};
-use std::io::Cursor;
-use postgres::types::{FromSql, IsNull, ToSql, Type, BYTEA};
+use crate::{
+    ewkb::{
+        self, AsEwkbGeometry, AsEwkbGeometryCollection, AsEwkbLineString, AsEwkbMultiLineString,
+        AsEwkbMultiPoint, AsEwkbMultiPolygon, AsEwkbPoint, AsEwkbPolygon, EwkbRead, EwkbWrite,
+    },
+    twkb::{self, TwkbGeom},
+    types::{LineString, Point, Polygon},
+};
+use bytes::{buf::ext::BufMutExt, BytesMut};
+use postgres::types::{accepts, to_sql_checked, FromSql, IsNull, ToSql, Type};
 use std::error::Error;
+use std::io::Cursor;
 
 macro_rules! accepts_geography {
-    () => (
+    () => {
         fn accepts(ty: &Type) -> bool {
             match ty.name() {
                 "geography" | "geometry" => true,
                 _ => false,
             }
         }
-    )
+    };
 }
 
 impl<'a> ToSql for ewkb::EwkbPoint<'a> {
-    fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-        self.write_ewkb(out)?;
+    fn to_sql(&self, _: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        self.write_ewkb(&mut out.writer())?;
         Ok(IsNull::No)
     }
 
@@ -33,26 +37,31 @@ impl<'a> ToSql for ewkb::EwkbPoint<'a> {
 }
 
 macro_rules! impl_sql_for_point_type {
-    ($ptype:ident) => (
-        impl FromSql for ewkb::$ptype {
-            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    ($ptype:ident) => {
+        impl<'a> FromSql<'a> for ewkb::$ptype {
+            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
-                ewkb::$ptype::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!($ptype)).into())
+                ewkb::$ptype::read_ewkb(&mut rdr)
+                    .map_err(|_| format!("cannot convert {} to {}", ty, stringify!($ptype)).into())
             }
 
             accepts_geography!();
         }
 
         impl ToSql for ewkb::$ptype {
-            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-                self.as_ewkb().write_ewkb(out)?;
+            fn to_sql(
+                &self,
+                _: &Type,
+                out: &mut BytesMut,
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+                self.as_ewkb().write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
 
             to_sql_checked!();
             accepts_geography!();
         }
-    )
+    };
 }
 
 impl_sql_for_point_type!(Point);
@@ -61,30 +70,38 @@ impl_sql_for_point_type!(PointM);
 impl_sql_for_point_type!(PointZM);
 
 macro_rules! impl_sql_for_geom_type {
-    ($geotype:ident) => (
-        impl<'a, T> FromSql for ewkb::$geotype<T>
-            where T: 'a + Point + EwkbRead
+    ($geotype:ident) => {
+        impl<'a, T> FromSql<'a> for ewkb::$geotype<T>
+        where
+            T: 'a + Point + EwkbRead,
         {
-            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
-                ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| format!("cannot convert {} to {}", ty, stringify!($geotype)).into())
+                ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| {
+                    format!("cannot convert {} to {}", ty, stringify!($geotype)).into()
+                })
             }
 
             accepts_geography!();
         }
 
         impl<'a, T> ToSql for ewkb::$geotype<T>
-            where T: 'a + Point + EwkbRead
+        where
+            T: 'a + Point + EwkbRead,
         {
-            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-                self.as_ewkb().write_ewkb(out)?;
+            fn to_sql(
+                &self,
+                _: &Type,
+                out: &mut BytesMut,
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+                self.as_ewkb().write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
 
             to_sql_checked!();
             accepts_geography!();
         }
-    )
+    };
 }
 
 impl_sql_for_geom_type!(LineStringT);
@@ -94,53 +111,68 @@ impl_sql_for_geom_type!(MultiLineStringT);
 impl_sql_for_geom_type!(MultiPolygonT);
 
 macro_rules! impl_sql_for_ewkb_type {
-    ($ewkbtype:ident contains points) => (
+    ($ewkbtype:ident contains points) => {
         impl<'a, T, I> ToSql for ewkb::$ewkbtype<'a, T, I>
-            where T: 'a + Point,
-                  I: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+        where
+            T: 'a + Point,
+            I: 'a + Iterator<Item = &'a T> + ExactSizeIterator<Item = &'a T>,
         {
-            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-                self.write_ewkb(out)?;
+            fn to_sql(
+                &self,
+                _: &Type,
+                out: &mut BytesMut,
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+                self.write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
 
             to_sql_checked!();
             accepts_geography!();
         }
-    );
-    ($ewkbtype:ident contains $itemtypetrait:ident) => (
+    };
+    ($ewkbtype:ident contains $itemtypetrait:ident) => {
         impl<'a, P, I, T, J> ToSql for ewkb::$ewkbtype<'a, P, I, T, J>
-            where P: 'a + Point,
-                  I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
-                  T: 'a + $itemtypetrait<'a, ItemType=P, Iter=I>,
-                  J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+        where
+            P: 'a + Point,
+            I: 'a + Iterator<Item = &'a P> + ExactSizeIterator<Item = &'a P>,
+            T: 'a + $itemtypetrait<'a, ItemType = P, Iter = I>,
+            J: 'a + Iterator<Item = &'a T> + ExactSizeIterator<Item = &'a T>,
         {
-            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-                self.write_ewkb(out)?;
+            fn to_sql(
+                &self,
+                _: &Type,
+                out: &mut BytesMut,
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+                self.write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
 
             to_sql_checked!();
             accepts_geography!();
         }
-    );
-    (multipoly $ewkbtype:ident contains $itemtypetrait:ident) => (
+    };
+    (multipoly $ewkbtype:ident contains $itemtypetrait:ident) => {
         impl<'a, P, I, L, K, T, J> ToSql for ewkb::$ewkbtype<'a, P, I, L, K, T, J>
-            where P: 'a + Point,
-                  I: 'a + Iterator<Item=&'a P> + ExactSizeIterator<Item=&'a P>,
-                  L: 'a + LineString<'a, ItemType=P, Iter=I>,
-                  K: 'a + Iterator<Item=&'a L> + ExactSizeIterator<Item=&'a L>,
-                  T: 'a + $itemtypetrait<'a, ItemType=L, Iter=K>,
-                  J: 'a + Iterator<Item=&'a T> + ExactSizeIterator<Item=&'a T>
+        where
+            P: 'a + Point,
+            I: 'a + Iterator<Item = &'a P> + ExactSizeIterator<Item = &'a P>,
+            L: 'a + LineString<'a, ItemType = P, Iter = I>,
+            K: 'a + Iterator<Item = &'a L> + ExactSizeIterator<Item = &'a L>,
+            T: 'a + $itemtypetrait<'a, ItemType = L, Iter = K>,
+            J: 'a + Iterator<Item = &'a T> + ExactSizeIterator<Item = &'a T>,
         {
             to_sql_checked!();
             accepts_geography!();
-            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-                self.write_ewkb(out)?;
+            fn to_sql(
+                &self,
+                _: &Type,
+                out: &mut BytesMut,
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+                self.write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
         }
-    )
+    };
 }
 
 impl_sql_for_ewkb_type!(EwkbLineString contains points);
@@ -149,11 +181,11 @@ impl_sql_for_ewkb_type!(EwkbMultiPoint contains points);
 impl_sql_for_ewkb_type!(EwkbMultiLineString contains LineString);
 impl_sql_for_ewkb_type!(multipoly EwkbMultiPolygon contains Polygon);
 
-impl<P> FromSql for ewkb::GeometryT<P>
+impl<'a, P> FromSql<'a> for ewkb::GeometryT<P>
 where
     P: Point + EwkbRead,
 {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         ewkb::GeometryT::<P>::read_ewkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
@@ -164,17 +196,21 @@ where
 
 // NOTE: Implement once per point type because AsEwkbPoint<'a> doesn't live long enough for ToSql
 macro_rules! impl_geometry_to_sql {
-    ($ptype:path) => (
+    ($ptype:path) => {
         impl ToSql for ewkb::GeometryT<$ptype> {
-            fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-                self.as_ewkb().write_ewkb(out)?;
+            fn to_sql(
+                &self,
+                _: &Type,
+                out: &mut BytesMut,
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+                self.as_ewkb().write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
 
             to_sql_checked!();
             accepts_geography!();
         }
-    )
+    };
 }
 
 impl_geometry_to_sql!(ewkb::Point);
@@ -182,11 +218,11 @@ impl_geometry_to_sql!(ewkb::PointZ);
 impl_geometry_to_sql!(ewkb::PointM);
 impl_geometry_to_sql!(ewkb::PointZM);
 
-impl<P> FromSql for ewkb::GeometryCollectionT<P>
+impl<'a, P> FromSql<'a> for ewkb::GeometryCollectionT<P>
 where
     P: Point + EwkbRead,
 {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         ewkb::GeometryCollectionT::<P>::read_ewkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
@@ -199,8 +235,8 @@ impl<'a, P> ToSql for ewkb::GeometryCollectionT<P>
 where
     P: Point + EwkbRead,
 {
-    fn to_sql(&self, _: &Type, out: &mut Vec<u8>) -> Result<IsNull, Box<Error + Sync + Send>> {
-        self.as_ewkb().write_ewkb(out)?;
+    fn to_sql(&self, _: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        self.as_ewkb().write_ewkb(&mut out.writer())?;
         Ok(IsNull::No)
     }
 
@@ -210,8 +246,8 @@ where
 
 // --- TWKB ---
 
-impl FromSql for twkb::Point {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+impl<'a> FromSql<'a> for twkb::Point {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::Point::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to Point", ty).into())
@@ -220,8 +256,8 @@ impl FromSql for twkb::Point {
     accepts!(BYTEA);
 }
 
-impl FromSql for twkb::LineString {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+impl<'a> FromSql<'a> for twkb::LineString {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::LineString::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to LineString", ty).into())
@@ -230,8 +266,8 @@ impl FromSql for twkb::LineString {
     accepts!(BYTEA);
 }
 
-impl FromSql for twkb::Polygon {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+impl<'a> FromSql<'a> for twkb::Polygon {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::Polygon::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to Polygon", ty).into())
@@ -240,17 +276,17 @@ impl FromSql for twkb::Polygon {
     accepts!(BYTEA);
 }
 
-impl FromSql for twkb::MultiPoint {
+impl<'a> FromSql<'a> for twkb::MultiPoint {
     accepts!(BYTEA);
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiPoint::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
     }
 }
 
-impl FromSql for twkb::MultiLineString {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+impl<'a> FromSql<'a> for twkb::MultiLineString {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiLineString::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to MultiLineString", ty).into())
@@ -259,8 +295,8 @@ impl FromSql for twkb::MultiLineString {
     accepts!(BYTEA);
 }
 
-impl FromSql for twkb::MultiPolygon {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+impl<'a> FromSql<'a> for twkb::MultiPolygon {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiPolygon::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to MultiPolygon", ty).into())
@@ -271,35 +307,36 @@ impl FromSql for twkb::MultiPolygon {
 
 #[cfg(test)]
 mod tests {
-    use postgres;
-    use postgres::Connection;
+    use crate::{
+        ewkb::{self, AsEwkbLineString, AsEwkbPoint},
+        twkb, types as postgis,
+    };
+    use postgres::{Client, NoTls};
     use std::env;
     use std::error::Error;
-    use types as postgis;
-    use ewkb::{self, AsEwkbLineString, AsEwkbPoint};
-    use twkb;
 
     macro_rules! or_panic {
-        ($e:expr) => (
+        ($e:expr) => {
             match $e {
                 Ok(ok) => ok,
-                Err(err) => panic!("{:#?}", err)
+                Err(err) => panic!("{:#?}", err),
             }
-        )
+        };
     }
 
-    fn connect() -> Connection {
+    fn connect() -> Client {
         match env::var("DBCONN") {
-            Result::Ok(val) => Connection::connect(&val as &str, postgres::TlsMode::None),
+            Result::Ok(val) => Client::connect(&val as &str, NoTls),
             Result::Err(err) => panic!("{:#?}", err),
-        }.unwrap()
+        }
+        .unwrap()
     }
 
     #[test]
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_point() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(Point))", &[]));
 
         // 'POINT (10 -20)'
@@ -316,7 +353,7 @@ mod tests {
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
 
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(Point, 4326))", &[]));
 
         let point = ewkb::Point { x: 10.0, y: -20.0, srid: Some(4326) };
@@ -335,7 +372,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_line() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineString))", &[]));
 
         let p = |x, y| ewkb::Point { x: x, y: y, srid: None };
@@ -346,7 +383,7 @@ mod tests {
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
 
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineString, 4326))", &[]));
 
         // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
@@ -356,7 +393,7 @@ mod tests {
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
 
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineStringZ, 4326))", &[]));
 
         let p = |x, y, z| ewkb::PointZ { x: x, y: y, z: z, srid: Some(4326) };
@@ -372,7 +409,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_polygon() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(Polygon))", &[]));
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
         // SELECT 'SRID=4326;POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry
@@ -387,7 +424,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_multipoint() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(MultiPointZ))", &[]));
         let p = |x, y, z| ewkb::PointZ { x: x, y: y, z: z, srid: Some(4326) };
         // SELECT 'SRID=4326;MULTIPOINT ((10 -20 100), (0 -0.5 101))'::geometry
@@ -401,7 +438,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_multiline() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(MultiLineString))", &[]));
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
         // SELECT 'SRID=4326;MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry
@@ -417,7 +454,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_multipolygon() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(MultiPolygon))", &[]));
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
         // SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry
@@ -435,7 +472,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_geometry() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry)", &[]));
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
         // SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry
@@ -456,7 +493,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_insert_geometrycollection() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(GeometryCollection))", &[]));
         let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
         // SELECT 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
@@ -486,7 +523,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_point() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT ('POINT(10 -20)')::geometry", &[]));
         let point = result.iter().map(|r| r.get::<_, ewkb::Point>(0)).last().unwrap();
         assert_eq!(point, ewkb::Point { x: 10.0, y: -20.0, srid: None });
@@ -504,7 +541,7 @@ mod tests {
         assert_eq!(&format!("{:?}", point), "Point { x: NaN, y: NaN, srid: None }");
 
         let result = or_panic!(conn.query("SELECT NULL::geometry(Point)", &[]));
-        let point = result.iter().map(|r| r.get_opt::<_, ewkb::Point>(0)).last().unwrap();
+        let point = result.iter().map(|r| r.try_get::<_, ewkb::Point>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point), "Some(Err(Error(Conversion(WasNull))))");
     }
 
@@ -512,7 +549,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_line() {
-        let conn = connect();
+        let mut conn = connect();
         let p = |x, y| ewkb::Point { x: x, y: y, srid: None };
         let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
@@ -532,7 +569,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_polygon() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'::geometry", &[]));
         let poly = result.iter().map(|r| r.get::<_, ewkb::Polygon>(0)).last().unwrap();
         assert_eq!(format!("{:.0?}", poly), "PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: Some(4326) }, Point { x: 2, y: 0, srid: Some(4326) }, Point { x: 2, y: 2, srid: Some(4326) }, Point { x: 0, y: 2, srid: Some(4326) }, Point { x: 0, y: 0, srid: Some(4326) }], srid: Some(4326) }], srid: Some(4326) }");
@@ -542,7 +579,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_multipoint() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;MULTIPOINT ((10 -20 100), (0 -0.5 101))'::geometry", &[]));
         let points = result.iter().map(|r| r.get::<_, ewkb::MultiPointZ>(0)).last().unwrap();
         assert_eq!(format!("{:.1?}", points), "MultiPointT { points: [PointZ { x: 10.0, y: -20.0, z: 100.0, srid: None }, PointZ { x: 0.0, y: -0.5, z: 101.0, srid: None }], srid: Some(4326) }");
@@ -552,7 +589,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_multiline() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;MULTILINESTRING ((10 -20, 0 -0.5), (0 0, 2 0))'::geometry", &[]));
         let multiline = result.iter().map(|r| r.get::<_, ewkb::MultiLineString>(0)).last().unwrap();
         assert_eq!(format!("{:.1?}", multiline), "MultiLineStringT { lines: [LineStringT { points: [Point { x: 10.0, y: -20.0, srid: None }, Point { x: 0.0, y: -0.5, srid: None }], srid: None }, LineStringT { points: [Point { x: 0.0, y: 0.0, srid: None }, Point { x: 2.0, y: 0.0, srid: None }], srid: None }], srid: Some(4326) }");
@@ -562,7 +599,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_multipolygon() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT 'SRID=4326;MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((10 10, -2 10, -2 -2, 10 -2, 10 10)))'::geometry", &[]));
         let multipoly = result.iter().map(|r| r.get::<_, ewkb::MultiPolygon>(0)).last().unwrap();
         assert_eq!(format!("{:.0?}", multipoly), "MultiPolygonT { polygons: [PolygonT { rings: [LineStringT { points: [Point { x: 0, y: 0, srid: None }, Point { x: 2, y: 0, srid: None }, Point { x: 2, y: 2, srid: None }, Point { x: 0, y: 2, srid: None }, Point { x: 0, y: 0, srid: None }], srid: None }], srid: None }, PolygonT { rings: [LineStringT { points: [Point { x: 10, y: 10, srid: None }, Point { x: -2, y: 10, srid: None }, Point { x: -2, y: -2, srid: None }, Point { x: 10, y: -2, srid: None }, Point { x: 10, y: 10, srid: None }], srid: None }], srid: None }], srid: Some(4326) }");
@@ -572,7 +609,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_geometrycollection() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT 'GeometryCollection(POINT (10 10),POINT (30 30),LINESTRING (15 15, 20 20))'::geometry", &[]));
         let geom = result.iter().map(|r| r.get::<_, ewkb::GeometryCollection>(0)).last().unwrap();
         assert_eq!(format!("{:.0?}", geom), "GeometryCollectionT { geometries: [Point(Point { x: 10, y: 10, srid: None }), Point(Point { x: 30, y: 30, srid: None }), LineString(LineStringT { points: [Point { x: 15, y: 15, srid: None }, Point { x: 20, y: 20, srid: None }], srid: None })], srid: None }");
@@ -582,7 +619,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_geometry() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry)", &[]));
         or_panic!(conn.execute("INSERT INTO geomtests VALUES('SRID=4326;POINT(10 -20 99)'::geometry)", &[]));
         let result = or_panic!(conn.query("SELECT geom FROM geomtests", &[]));
@@ -594,9 +631,9 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_select_type_error() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
-        let poly = result.iter().map(|r| r.get_opt::<_, ewkb::Polygon>(0)).last().unwrap();
+        let poly = result.iter().map(|r| r.try_get::<_, ewkb::Polygon>(0)).last().unwrap();
         assert_eq!(format!("{:?}", poly), "Some(Err(Error(Conversion(StringError(\"cannot convert geometry to PolygonT\")))))");
     }
 
@@ -604,7 +641,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_twkb() {
-        let conn = connect();
+        let mut conn = connect();
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT(10 -20)'::geometry)", &[]));
         let point = result.iter().map(|r| r.get::<_, twkb::Point>(0)).last().unwrap();
         assert_eq!(point, twkb::Point {x: 10.0, y: -20.0});
@@ -616,11 +653,11 @@ mod tests {
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT EMPTY'::geometry)", &[]));
         let point = result.iter().map(|r| r.get::<_, twkb::Point>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point), "Point { x: NaN, y: NaN }");
-        let point = &point as &postgis::Point;
+        let point = &point as &dyn postgis::Point;
         assert!(point.x().is_nan());
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB(NULL::geometry(Point))", &[]));
-        let point = result.iter().map(|r| r.get_opt::<_, twkb::Point>(0)).last().unwrap();
+        let point = result.iter().map(|r| r.try_get::<_, twkb::Point>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point), "Some(Err(Error(Conversion(WasNull))))");
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
@@ -632,7 +669,7 @@ mod tests {
     #[ignore]
     #[cfg_attr(rustfmt, rustfmt_skip)]
     fn test_twkb_insert() {
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(Point))", &[]));
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT(10 -20)'::geometry)", &[]));
@@ -643,7 +680,7 @@ mod tests {
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(conn.execute("TRUNCATE geomtests", &[]));
 
-        let conn = connect();
+        let mut conn = connect();
         or_panic!(conn.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineString))", &[]));
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
@@ -660,16 +697,18 @@ mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     #[allow(unused_imports,unused_variables)]
     fn test_examples() {
-        use postgres::{Connection, TlsMode};
+        use postgres::{Client, NoTls};
         //use postgis::ewkb;
         //use postgis::LineString;
 
         fn main() {
             //
-            use ewkb;
-            use types::LineString;
-            use twkb;
-            let conn = connect();
+            use crate::{
+                ewkb,
+                types::LineString,
+                twkb
+            };
+            let mut conn = connect();
             or_panic!(conn.execute("CREATE TEMPORARY TABLE busline (route geometry(LineString))", &[]));
             or_panic!(conn.execute("CREATE TEMPORARY TABLE stops (stop geometry(Point))", &[]));
             or_panic!(conn.execute("INSERT INTO busline (route) VALUES ('LINESTRING(10 -20, -0 -0.5)'::geometry)", &[]));
@@ -683,8 +722,8 @@ mod tests {
             }
 
             for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
-                let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
-                match route.unwrap() {
+                let route = row.try_get::<_, Option<ewkb::LineString>>("route");
+                match route {
                     Ok(Some(geom)) => { println!("{:?}", geom) }
                     Ok(None) => { /* Handle NULL value */ }
                     Err(err) => { println!("Error: {}", err) }
