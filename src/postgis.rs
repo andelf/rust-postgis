@@ -313,7 +313,6 @@ mod tests {
     };
     use postgres::{Client, NoTls};
     use std::env;
-    use std::error::Error;
 
     macro_rules! or_panic {
         ($e:expr) => {
@@ -379,7 +378,7 @@ mod tests {
         // 'LINESTRING (10 -20, -0 -0.5)'
         let line = ewkb::LineString {srid: None, points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(client.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
-        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
+        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('LINESTRING(10 -20, 0 -0.5)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(client.execute("TRUNCATE geomtests", &[]));
 
@@ -389,7 +388,7 @@ mod tests {
         // 'SRID=4326;LINESTRING (10 -20, -0 -0.5)'
         let line = ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]};
         or_panic!(client.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
-        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING(10 -20, -0 -0.5)') FROM geomtests", &[]));
+        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING(10 -20, 0 -0.5)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(client.execute("TRUNCATE geomtests", &[]));
 
@@ -400,7 +399,7 @@ mod tests {
         // 'SRID=4326;LINESTRING (10 -20 100, -0 -0.5 101)'
         let line = ewkb::LineStringZ {srid: Some(4326), points: vec![p(10.0, -20.0, 100.0), p(0., -0.5, 101.0)]};
         or_panic!(client.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line]));
-        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING (10 -20 100, -0 -0.5 101)') FROM geomtests", &[]));
+        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('SRID=4326;LINESTRING (10 -20 100, 0 -0.5 101)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(client.execute("TRUNCATE geomtests", &[]));
     }
@@ -683,11 +682,11 @@ mod tests {
         let mut client = connect();
         or_panic!(client.execute("CREATE TEMPORARY TABLE geomtests (geom geometry(LineString))", &[]));
 
-        let result = or_panic!(client.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
+        let result = or_panic!(client.query("SELECT ST_AsTWKB('LINESTRING (10 -20, 0 -0.5)'::geometry, 1)", &[]));
         let line = result.iter().map(|r| r.get::<_, twkb::LineString>(0)).last().unwrap();
 
         or_panic!(client.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&line.as_ewkb()]));
-        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('LINESTRING (10 -20, -0 -0.5)') FROM geomtests", &[]));
+        let result = or_panic!(client.query("SELECT geom=ST_GeomFromEWKT('LINESTRING (10 -20, 0 -0.5)') FROM geomtests", &[]));
         assert!(result.iter().map(|r| r.get::<_, bool>(0)).last().unwrap());
         or_panic!(client.execute("TRUNCATE geomtests", &[]));
     }
