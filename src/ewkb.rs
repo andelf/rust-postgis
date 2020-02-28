@@ -387,6 +387,7 @@ impl<'a> EwkbWrite for EwkbPoint<'a> {
 macro_rules! point_container_type {
     // geometries containing points
     ($geotypetrait:ident for $geotype:ident) => {
+        /// $geotypetrait
         #[derive(PartialEq, Clone, Debug)]
         pub struct $geotype<P: postgis::Point + EwkbRead> {
             pub points: Vec<P>,
@@ -868,8 +869,6 @@ macro_rules! geometry_container_write {
     };
 }
 
-#[allow(unused_doc_comments)]
-/// LineString
 point_container_type!(LineString for LineStringT);
 impl_read_for_point_container_type!(singletype LineStringT);
 point_container_write!(LineString and AsEwkbLineString for LineStringT
@@ -885,8 +884,6 @@ pub type LineStringM = LineStringT<PointM>;
 /// OGC LineStringZM type
 pub type LineStringZM = LineStringT<PointZM>;
 
-#[allow(unused_doc_comments)]
-/// Polygon
 geometry_container_type!(Polygon for PolygonT contains LineStringT named rings);
 impl_read_for_geometry_container_type!(singletype PolygonT contains LineStringT named rings);
 geometry_container_write!(Polygon and AsEwkbPolygon for PolygonT
@@ -903,8 +900,6 @@ pub type PolygonM = PolygonT<PointM>;
 /// OGC PolygonZM type
 pub type PolygonZM = PolygonT<PointZM>;
 
-#[allow(unused_doc_comments)]
-/// MultiPoint
 point_container_type!(MultiPoint for MultiPointT);
 impl_read_for_point_container_type!(multitype MultiPointT);
 point_container_write!(MultiPoint and AsEwkbMultiPoint for MultiPointT
@@ -920,8 +915,6 @@ pub type MultiPointM = MultiPointT<PointM>;
 /// OGC MultiPointZM type
 pub type MultiPointZM = MultiPointT<PointZM>;
 
-#[allow(unused_doc_comments)]
-/// MultiLineString
 geometry_container_type!(MultiLineString for MultiLineStringT contains LineStringT named lines);
 impl_read_for_geometry_container_type!(multitype MultiLineStringT contains LineStringT named lines);
 geometry_container_write!(MultiLineString and AsEwkbMultiLineString for MultiLineStringT
@@ -938,8 +931,6 @@ pub type MultiLineStringM = MultiLineStringT<PointM>;
 /// OGC MultiLineStringZM type
 pub type MultiLineStringZM = MultiLineStringT<PointZM>;
 
-#[allow(unused_doc_comments)]
-/// MultiPolygon
 geometry_container_type!(MultiPolygon for MultiPolygonT contains PolygonT named polygons);
 impl_read_for_geometry_container_type!(multitype MultiPolygonT contains PolygonT named polygons);
 geometry_container_write!(multipoly MultiPolygon and AsEwkbMultiPolygon for MultiPolygonT
