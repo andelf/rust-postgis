@@ -365,7 +365,7 @@ mod tests {
         // Missing SRID
         let point = ewkb::Point { x: 10.0, y: -20.0, srid: None };
         let result = conn.execute("INSERT INTO geomtests (geom) VALUES ($1)", &[&point]);
-        assert_eq!(result.err().unwrap().description(), "database error");
+        assert!(format!("{}", result.err().unwrap()).starts_with("db error"));
     }
 
     #[test]
@@ -542,7 +542,7 @@ mod tests {
 
         let result = or_panic!(conn.query("SELECT NULL::geometry(Point)", &[]));
         let point = result.iter().map(|r| r.try_get::<_, ewkb::Point>(0)).last().unwrap();
-        assert_eq!(&format!("{:?}", point), "Some(Err(Error(Conversion(WasNull))))");
+        assert_eq!(&format!("{:?}", point), "Err(Error { kind: FromSql(0), cause: Some(WasNull) })");
     }
 
     #[test]
@@ -634,7 +634,7 @@ mod tests {
         let mut conn = connect();
         let result = or_panic!(conn.query("SELECT ('LINESTRING (10 -20, -0 -0.5)')::geometry", &[]));
         let poly = result.iter().map(|r| r.try_get::<_, ewkb::Polygon>(0)).last().unwrap();
-        assert_eq!(format!("{:?}", poly), "Some(Err(Error(Conversion(StringError(\"cannot convert geometry to PolygonT\")))))");
+        assert_eq!(format!("{:?}", poly), "Err(Error { kind: FromSql(0), cause: Some(\"cannot convert geometry to PolygonT\") })");
     }
 
     #[test]
@@ -658,7 +658,7 @@ mod tests {
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB(NULL::geometry(Point))", &[]));
         let point = result.iter().map(|r| r.try_get::<_, twkb::Point>(0)).last().unwrap();
-        assert_eq!(&format!("{:?}", point), "Some(Err(Error(Conversion(WasNull))))");
+        assert_eq!(&format!("{:?}", point), "Err(Error { kind: FromSql(0), cause: Some(WasNull) })");
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('LINESTRING (10 -20, -0 -0.5)'::geometry, 1)", &[]));
         let line = result.iter().map(|r| r.get::<_, twkb::LineString>(0)).last().unwrap();
