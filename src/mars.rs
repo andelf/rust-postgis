@@ -7,7 +7,7 @@
 
 //! Conversion between GCJ-02 and WGS-84 coordinates.
 
-use ewkb;
+use crate::ewkb;
 
 // http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
 struct Converter {
