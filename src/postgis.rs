@@ -27,7 +27,7 @@ macro_rules! accepts_geography {
 }
 
 impl<'a> ToSql for ewkb::EwkbPoint<'a> {
-    fn to_sql(&self, _: &Type, out: &mut BytesMut) -> Result<IsNull, Box<Error + Sync + Send>> {
+    fn to_sql(&self, _: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         self.write_ewkb(&mut out.writer())?;
         Ok(IsNull::No)
     }
@@ -39,7 +39,7 @@ impl<'a> ToSql for ewkb::EwkbPoint<'a> {
 macro_rules! impl_sql_for_point_type {
     ($ptype:ident) => {
         impl<'a> FromSql<'a> for ewkb::$ptype {
-            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
                 ewkb::$ptype::read_ewkb(&mut rdr)
                     .map_err(|_| format!("cannot convert {} to {}", ty, stringify!($ptype)).into())
@@ -53,7 +53,7 @@ macro_rules! impl_sql_for_point_type {
                 &self,
                 _: &Type,
                 out: &mut BytesMut,
-            ) -> Result<IsNull, Box<Error + Sync + Send>> {
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
                 self.as_ewkb().write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
@@ -75,7 +75,7 @@ macro_rules! impl_sql_for_geom_type {
         where
             T: 'a + Point + EwkbRead,
         {
-            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+            fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
                 let mut rdr = Cursor::new(raw);
                 ewkb::$geotype::<T>::read_ewkb(&mut rdr).map_err(|_| {
                     format!("cannot convert {} to {}", ty, stringify!($geotype)).into()
@@ -93,7 +93,7 @@ macro_rules! impl_sql_for_geom_type {
                 &self,
                 _: &Type,
                 out: &mut BytesMut,
-            ) -> Result<IsNull, Box<Error + Sync + Send>> {
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
                 self.as_ewkb().write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
@@ -121,7 +121,7 @@ macro_rules! impl_sql_for_ewkb_type {
                 &self,
                 _: &Type,
                 out: &mut BytesMut,
-            ) -> Result<IsNull, Box<Error + Sync + Send>> {
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
                 self.write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
@@ -142,7 +142,7 @@ macro_rules! impl_sql_for_ewkb_type {
                 &self,
                 _: &Type,
                 out: &mut BytesMut,
-            ) -> Result<IsNull, Box<Error + Sync + Send>> {
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
                 self.write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
@@ -167,7 +167,7 @@ macro_rules! impl_sql_for_ewkb_type {
                 &self,
                 _: &Type,
                 out: &mut BytesMut,
-            ) -> Result<IsNull, Box<Error + Sync + Send>> {
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
                 self.write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
@@ -185,7 +185,7 @@ impl<'a, P> FromSql<'a> for ewkb::GeometryT<P>
 where
     P: Point + EwkbRead,
 {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         ewkb::GeometryT::<P>::read_ewkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
@@ -202,7 +202,7 @@ macro_rules! impl_geometry_to_sql {
                 &self,
                 _: &Type,
                 out: &mut BytesMut,
-            ) -> Result<IsNull, Box<Error + Sync + Send>> {
+            ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
                 self.as_ewkb().write_ewkb(&mut out.writer())?;
                 Ok(IsNull::No)
             }
@@ -222,7 +222,7 @@ impl<'a, P> FromSql<'a> for ewkb::GeometryCollectionT<P>
 where
     P: Point + EwkbRead,
 {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         ewkb::GeometryCollectionT::<P>::read_ewkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to {}", ty, stringify!(P)).into())
@@ -235,7 +235,7 @@ impl<'a, P> ToSql for ewkb::GeometryCollectionT<P>
 where
     P: Point + EwkbRead,
 {
-    fn to_sql(&self, _: &Type, out: &mut BytesMut) -> Result<IsNull, Box<Error + Sync + Send>> {
+    fn to_sql(&self, _: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
         self.as_ewkb().write_ewkb(&mut out.writer())?;
         Ok(IsNull::No)
     }
@@ -247,7 +247,7 @@ where
 // --- TWKB ---
 
 impl<'a> FromSql<'a> for twkb::Point {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::Point::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to Point", ty).into())
@@ -257,7 +257,7 @@ impl<'a> FromSql<'a> for twkb::Point {
 }
 
 impl<'a> FromSql<'a> for twkb::LineString {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::LineString::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to LineString", ty).into())
@@ -267,7 +267,7 @@ impl<'a> FromSql<'a> for twkb::LineString {
 }
 
 impl<'a> FromSql<'a> for twkb::Polygon {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::Polygon::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to Polygon", ty).into())
@@ -278,7 +278,7 @@ impl<'a> FromSql<'a> for twkb::Polygon {
 
 impl<'a> FromSql<'a> for twkb::MultiPoint {
     accepts!(BYTEA);
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiPoint::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to MultiPoint", ty).into())
@@ -286,7 +286,7 @@ impl<'a> FromSql<'a> for twkb::MultiPoint {
 }
 
 impl<'a> FromSql<'a> for twkb::MultiLineString {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiLineString::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to MultiLineString", ty).into())
@@ -296,7 +296,7 @@ impl<'a> FromSql<'a> for twkb::MultiLineString {
 }
 
 impl<'a> FromSql<'a> for twkb::MultiPolygon {
-    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<Error + Sync + Send>> {
+    fn from_sql(ty: &Type, raw: &[u8]) -> Result<Self, Box<dyn Error + Sync + Send>> {
         let mut rdr = Cursor::new(raw);
         twkb::MultiPolygon::read_twkb(&mut rdr)
             .map_err(|_| format!("cannot convert {} to MultiPolygon", ty).into())
@@ -653,7 +653,7 @@ mod tests {
         let result = or_panic!(conn.query("SELECT ST_AsTWKB('POINT EMPTY'::geometry)", &[]));
         let point = result.iter().map(|r| r.get::<_, twkb::Point>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", point), "Point { x: NaN, y: NaN }");
-        let point = &point as &postgis::Point;
+        let point = &point as &dyn postgis::Point;
         assert!(point.x().is_nan());
 
         let result = or_panic!(conn.query("SELECT ST_AsTWKB(NULL::geometry(Point))", &[]));

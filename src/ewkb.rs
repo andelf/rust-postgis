@@ -596,7 +596,7 @@ macro_rules! point_container_write {
             P: 'a + postgis::Point,
             I: 'a + Iterator<Item = &'a P> + ExactSizeIterator<Item = &'a P>,
         {
-            pub geom: &'a postgis::$geotypetrait<'a, ItemType = P, Iter = I>,
+            pub geom: &'a dyn postgis::$geotypetrait<'a, ItemType = P, Iter = I>,
             pub srid: Option<i32>,
             pub point_type: PointType,
         }
@@ -672,7 +672,7 @@ macro_rules! geometry_container_write {
             T: 'a + postgis::$itemtypetrait<'a, ItemType = P, Iter = I>,
             J: 'a + Iterator<Item = &'a T> + ExactSizeIterator<Item = &'a T>,
         {
-            pub geom: &'a postgis::$geotypetrait<'a, ItemType = T, Iter = J>,
+            pub geom: &'a dyn postgis::$geotypetrait<'a, ItemType = T, Iter = J>,
             pub srid: Option<i32>,
             pub point_type: PointType,
         }
@@ -761,7 +761,7 @@ macro_rules! geometry_container_write {
             T: 'a + postgis::$itemtypetrait<'a, ItemType = L, Iter = K>,
             J: 'a + Iterator<Item = &'a T> + ExactSizeIterator<Item = &'a T>,
         {
-            pub geom: &'a postgis::$geotypetrait<'a, ItemType = T, Iter = J>,
+            pub geom: &'a dyn postgis::$geotypetrait<'a, ItemType = T, Iter = J>,
             pub srid: Option<i32>,
             pub point_type: PointType,
         }
@@ -868,6 +868,7 @@ macro_rules! geometry_container_write {
     };
 }
 
+#[allow(unused_doc_comments)]
 /// LineString
 point_container_type!(LineString for LineStringT);
 impl_read_for_point_container_type!(singletype LineStringT);
@@ -884,6 +885,7 @@ pub type LineStringM = LineStringT<PointM>;
 /// OGC LineStringZM type
 pub type LineStringZM = LineStringT<PointZM>;
 
+#[allow(unused_doc_comments)]
 /// Polygon
 geometry_container_type!(Polygon for PolygonT contains LineStringT named rings);
 impl_read_for_geometry_container_type!(singletype PolygonT contains LineStringT named rings);
@@ -901,6 +903,7 @@ pub type PolygonM = PolygonT<PointM>;
 /// OGC PolygonZM type
 pub type PolygonZM = PolygonT<PointZM>;
 
+#[allow(unused_doc_comments)]
 /// MultiPoint
 point_container_type!(MultiPoint for MultiPointT);
 impl_read_for_point_container_type!(multitype MultiPointT);
@@ -917,6 +920,7 @@ pub type MultiPointM = MultiPointT<PointM>;
 /// OGC MultiPointZM type
 pub type MultiPointZM = MultiPointT<PointZM>;
 
+#[allow(unused_doc_comments)]
 /// MultiLineString
 geometry_container_type!(MultiLineString for MultiLineStringT contains LineStringT named lines);
 impl_read_for_geometry_container_type!(multitype MultiLineStringT contains LineStringT named lines);
@@ -934,6 +938,7 @@ pub type MultiLineStringM = MultiLineStringT<PointM>;
 /// OGC MultiLineStringZM type
 pub type MultiLineStringZM = MultiLineStringT<PointZM>;
 
+#[allow(unused_doc_comments)]
 /// MultiPolygon
 geometry_container_type!(MultiPolygon for MultiPolygonT contains PolygonT named polygons);
 impl_read_for_geometry_container_type!(multitype MultiPolygonT contains PolygonT named polygons);
@@ -1382,7 +1387,7 @@ where
     GI: 'a + Iterator<Item = &'a G> + ExactSizeIterator<Item = &'a G>,
     GC: 'a + postgis::GeometryCollection<'a, ItemType = G, Iter = GI>,
 {
-    pub geom: &'a postgis::GeometryCollection<'a, ItemType = G, Iter = GI>,
+    pub geom: &'a dyn postgis::GeometryCollection<'a, ItemType = G, Iter = GI>,
     pub srid: Option<i32>,
     pub point_type: PointType,
 }
