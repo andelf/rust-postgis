@@ -16,16 +16,14 @@
 //! }
 //! ```
 
-use types as postgis;
-use ewkb;
+use crate::{error::Error, ewkb, types as postgis};
+use byteorder::ReadBytesExt;
+use std::f64;
+use std::fmt;
 use std::io::prelude::*;
 use std::mem;
-use std::fmt;
-use std::u8;
-use std::f64;
 use std::slice::Iter;
-use byteorder::ReadBytesExt;
-use error::Error;
+use std::u8;
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct Point {
@@ -571,8 +569,10 @@ impl<'a> ewkb::AsEwkbMultiPolygon<'a> for MultiPolygon {
 }
 
 #[cfg(test)]
-use ewkb::{AsEwkbLineString, AsEwkbMultiLineString, AsEwkbMultiPoint, AsEwkbMultiPolygon,
-           AsEwkbPoint, AsEwkbPolygon, EwkbWrite};
+use ewkb::{
+    AsEwkbLineString, AsEwkbMultiLineString, AsEwkbMultiPoint, AsEwkbMultiPolygon, AsEwkbPoint,
+    AsEwkbPolygon, EwkbWrite,
+};
 
 #[cfg(test)]
 #[cfg_attr(rustfmt, rustfmt_skip)]

@@ -35,14 +35,10 @@
 //! }
 //! ```
 
-extern crate byteorder;
-#[macro_use(accepts, to_sql_checked)]
-extern crate postgres;
-
 pub mod error;
 mod types;
 pub use types::{LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon};
 pub mod ewkb;
-pub mod twkb;
-mod postgis;
 pub mod mars;
+mod postgis;
+pub mod twkb;
