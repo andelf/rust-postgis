@@ -1,3 +1,9 @@
+## 0.7.0 (2020-03-25)
+
+* Update to rust-postgres 0.17 (@jblondin)
+* Update to Rust edition to 2018 (@jblondin)
+* Impl Copy trait for Point types (@pka)
+
 ## 0.6.0 (2018-03-17)
 
 * Support for Geometry and GeometryCollection
