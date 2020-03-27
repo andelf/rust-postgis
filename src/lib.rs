@@ -9,17 +9,15 @@
 //! - Tiny WKB (TWKB) support
 //!
 //! ```rust,no_run
-//! use postgres::{Connection, TlsMode};
-//! use postgis::ewkb;
-//! use postgis::LineString;
+//! use postgres::{Client, NoTls};
+//! use postgis::{ewkb, LineString};
 //!
 //! fn main() {
-//!     // conn ....
-//!     # let conn = Connection::connect("postgresql://postgres@localhost", TlsMode::None).unwrap();
-//!     for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
+//!     let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+//!     for row in &client.query("SELECT * FROM busline", &[]).unwrap() {
 //!         let route: ewkb::LineString = row.get("route");
 //!         let last_stop = route.points().last().unwrap();
-//!         let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
+//!         let _ = client.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
 //!     }
 //! }
 //! ```
@@ -27,8 +25,13 @@
 //! Handling NULL values:
 //!
 //! ```rust,no_run
-//! let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
-//! match route.unwrap() {
+//! # use postgres::{Client, NoTls};
+//! # use postgis::{ewkb, LineString};
+//! # let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+//! # let rows = client.query("SELECT * FROM busline", &[]).unwrap();
+//! # let row = rows.first().unwrap();
+//! let route = row.try_get::<_, Option<ewkb::LineString>>("route");
+//! match route {
 //!     Ok(Some(geom)) => { println!("{:?}", geom) }
 //!     Ok(None) => { /* Handle NULL value */ }
 //!     Err(err) => { println!("Error: {}", err) }

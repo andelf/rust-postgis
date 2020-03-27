@@ -11,9 +11,6 @@ keywords = ["PostgreSQL", "PostGIS", "GIS", "GEO"]
 license = "MIT"
 edition = "2018"
 
-[lib]
-doctest = false
-
 [dependencies]
 postgres = "^0.17"
 byteorder = "^0.5"

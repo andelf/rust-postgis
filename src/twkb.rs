@@ -5,14 +5,14 @@
 //! Read geometries in [Tiny WKB](https://github.com/TWKB/Specification/blob/master/twkb.md) format.
 //!
 //! ```rust,no_run
-//! use postgis::twkb;
-//! use postgis::LineString;
+//! # use postgres::{Client, NoTls};
+//! use postgis::{twkb, LineString, ewkb::AsEwkbPoint};
 //!
-//! # let conn = Connection::connect("postgresql://postgres@localhost", TlsMode::None).unwrap();
-//! for row in &conn.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
+//! # let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+//! for row in &client.query("SELECT ST_AsTWKB(route) FROM busline", &[]).unwrap() {
 //!     let route: twkb::LineString = row.get(0);
 //!     let last_stop = route.points().last().unwrap();
-//!     let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop.as_ewkb()]);
+//!     let _ = client.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop.as_ewkb()]);
 //! }
 //! ```
 

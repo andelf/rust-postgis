@@ -15,24 +15,23 @@ An extension to rust-postgres, adds support for PostGIS.
 ## Usage
 
 ```rust
-use postgres::{Connection, TlsMode};
-use postgis::ewkb;
-use postgis::LineString;
+use postgres::{Client, NoTls};
+use postgis::{ewkb, LineString};
 
 fn main() {
-    // conn ....
-    for row in &conn.query("SELECT * FROM busline", &[]).unwrap() {
+    let mut client = Client::connect("host=localhost user=postgres", NoTls).unwrap();
+    for row in &client.query("SELECT * FROM busline", &[]).unwrap() {
         let route: ewkb::LineString = row.get("route");
         let last_stop = route.points().last().unwrap();
-        let _ = conn.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
+        let _ = client.execute("INSERT INTO stops (stop) VALUES ($1)", &[&last_stop]);
     }
 }
 ```
 
 Handling NULL values:
 ```rust
-let route = row.get_opt::<_, Option<ewkb::LineString>>("route");
-match route.unwrap() {
+let route = row.try_get::<_, Option<ewkb::LineString>>("route");
+match route {
     Ok(Some(geom)) => { println!("{:?}", geom) }
     Ok(None) => { /* Handle NULL value */ }
     Err(err) => { println!("Error: {}", err) }
