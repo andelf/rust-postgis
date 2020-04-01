@@ -9,7 +9,7 @@
 
 use crate::ewkb;
 
-// http://emq.googlecode.com/svn/emq/src/Algorithm/Coords/Converter.java
+// https://github.com/Artoria2e5/emq/blob/master/emq/src/Algorithm/Coords/Converter.java
 struct Converter {
     casm_rr: f64,
     casm_t1: f64,

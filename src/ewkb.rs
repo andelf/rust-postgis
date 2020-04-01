@@ -3,7 +3,7 @@
 //
 //! Read and write geometries in [OGC WKB](http://www.opengeospatial.org/standards/sfa) format.
 //!
-//! Support for SRID information according to [PostGIS EWKB extensions](https://svn.osgeo.org/postgis/trunk/doc/ZMSgeoms.txt)
+//! Support for SRID information according to [PostGIS EWKB extensions](https://git.osgeo.org/gitea/postgis/postgis/src/branch/master/doc/ZMSgeoms.txt)
 
 use crate::{error::Error, types as postgis};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
