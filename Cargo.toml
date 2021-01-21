@@ -12,6 +12,6 @@ license = "MIT"
 edition = "2018"
 
 [dependencies]
-postgres = "^0.17"
-byteorder = "^0.5"
-bytes = "0.5"
+postgres = "0.19"
+byteorder = "1.4"
+bytes = "1.0"
