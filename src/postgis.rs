@@ -10,7 +10,7 @@ use crate::{
     twkb::{self, TwkbGeom},
     types::{LineString, Point, Polygon},
 };
-use bytes::{buf::ext::BufMutExt, BytesMut};
+use bytes::{BufMut, BytesMut};
 use postgres::types::{accepts, to_sql_checked, FromSql, IsNull, ToSql, Type};
 use std::error::Error;
 use std::io::Cursor;
