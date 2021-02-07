@@ -1,3 +1,8 @@
+## 0.8.0 (2021-02-07)
+
+* Depend on postgres-types instead of rust-postgres
+  (@jmpunkt, @maxburke, @michaelkirk)
+
 ## 0.7.0 (2020-03-25)
 
 * Update to rust-postgres 0.17 (@jblondin)
