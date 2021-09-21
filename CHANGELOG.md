@@ -1,3 +1,7 @@
+## 0.8.1 (2021-09-21)
+
+* Avoid unnecessary and unsound transmute (@lnicola)
+
 ## 0.8.0 (2021-02-07)
 
 * Depend on postgres-types instead of rust-postgres
