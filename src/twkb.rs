@@ -21,7 +21,6 @@ use byteorder::ReadBytesExt;
 use std::f64;
 use std::fmt;
 use std::io::prelude::*;
-use std::mem;
 use std::slice::Iter;
 use std::u8;
 
@@ -207,10 +206,10 @@ impl Point {
 
 impl postgis::Point for Point {
     fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
+        self.x
     }
     fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+        self.y
     }
 }
 

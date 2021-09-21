@@ -11,7 +11,6 @@ use std;
 use std::fmt;
 use std::io::prelude::*;
 use std::iter::FromIterator;
-use std::mem;
 use std::slice::Iter;
 
 // --- Structs for reading PostGIS geometries into
@@ -182,10 +181,10 @@ impl Point {
 
 impl postgis::Point for Point {
     fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
+        self.x
     }
     fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+        self.y
     }
 }
 
@@ -217,13 +216,13 @@ impl PointZ {
 
 impl postgis::Point for PointZ {
     fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
+        self.x
     }
     fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+        self.y
     }
     fn opt_z(&self) -> Option<f64> {
-        Some(unsafe { *mem::transmute::<_, *const f64>(self).offset(2) })
+        Some(self.z)
     }
 }
 
@@ -255,13 +254,13 @@ impl PointM {
 
 impl postgis::Point for PointM {
     fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
+        self.x
     }
     fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+        self.y
     }
     fn opt_m(&self) -> Option<f64> {
-        Some(unsafe { *mem::transmute::<_, *const f64>(self).offset(2) })
+        Some(self.m)
     }
 }
 
@@ -294,16 +293,16 @@ impl PointZM {
 
 impl postgis::Point for PointZM {
     fn x(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self) }
+        self.x
     }
     fn y(&self) -> f64 {
-        unsafe { *mem::transmute::<_, *const f64>(self).offset(1) }
+        self.y
     }
     fn opt_z(&self) -> Option<f64> {
-        Some(unsafe { *mem::transmute::<_, *const f64>(self).offset(2) })
+        Some(self.z)
     }
     fn opt_m(&self) -> Option<f64> {
-        Some(unsafe { *mem::transmute::<_, *const f64>(self).offset(3) })
+        Some(self.m)
     }
 }
 
