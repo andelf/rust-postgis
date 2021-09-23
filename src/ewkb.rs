@@ -69,11 +69,16 @@ pub trait EwkbRead: fmt::Debug + Sized {
         if type_id & 0x20000000 == 0x20000000 {
             srid = Some(read_i32(raw, is_be)?);
         }
-        Self::read_ewkb_body(raw, is_be, srid)
+        Self::read_ewkb_body(raw, is_be, type_id, srid)
     }
 
     #[doc(hidden)]
-    fn read_ewkb_body<R: Read>(raw: &mut R, is_be: bool, srid: Option<i32>) -> Result<Self, Error>;
+    fn read_ewkb_body<R: Read>(
+        raw: &mut R,
+        is_be: bool,
+        type_id: u32,
+        srid: Option<i32>,
+    ) -> Result<Self, Error>;
 }
 
 pub trait EwkbWrite: fmt::Debug + Sized {
@@ -154,13 +159,14 @@ fn read_f64<R: Read>(raw: &mut R, is_be: bool) -> Result<f64, Error> {
 
 // --- Point
 
+fn has_z(type_id: u32) -> bool {
+    type_id & 0x80000000 == 0x80000000
+}
+fn has_m(type_id: u32) -> bool {
+    type_id & 0x40000000 == 0x40000000
+}
+
 impl Point {
-    pub fn has_z() -> bool {
-        false
-    }
-    pub fn has_m() -> bool {
-        false
-    }
     pub fn new(x: f64, y: f64, srid: Option<i32>) -> Self {
         Point {
             x: x,
@@ -189,12 +195,6 @@ impl postgis::Point for Point {
 }
 
 impl PointZ {
-    pub fn has_z() -> bool {
-        true
-    }
-    pub fn has_m() -> bool {
-        false
-    }
     pub fn new(x: f64, y: f64, z: f64, srid: Option<i32>) -> Self {
         PointZ {
             x: x,
@@ -227,12 +227,6 @@ impl postgis::Point for PointZ {
 }
 
 impl PointM {
-    pub fn has_z() -> bool {
-        false
-    }
-    pub fn has_m() -> bool {
-        true
-    }
     pub fn new(x: f64, y: f64, m: f64, srid: Option<i32>) -> Self {
         PointM {
             x: x,
@@ -265,12 +259,6 @@ impl postgis::Point for PointM {
 }
 
 impl PointZM {
-    pub fn has_z() -> bool {
-        true
-    }
-    pub fn has_m() -> bool {
-        true
-    }
     pub fn new(x: f64, y: f64, z: f64, m: f64, srid: Option<i32>) -> Self {
         PointZM {
             x: x,
@@ -315,16 +303,17 @@ macro_rules! impl_point_read_traits {
             fn read_ewkb_body<R: Read>(
                 raw: &mut R,
                 is_be: bool,
+                type_id: u32,
                 srid: Option<i32>,
             ) -> Result<Self, Error> {
                 let x = read_f64(raw, is_be)?;
                 let y = read_f64(raw, is_be)?;
-                let z = if Self::has_z() {
+                let z = if has_z(type_id) {
                     Some(read_f64(raw, is_be)?)
                 } else {
                     None
                 };
-                let m = if Self::has_m() {
+                let m = if has_m(type_id) {
                     Some(read_f64(raw, is_be)?)
                 } else {
                     None
@@ -495,12 +484,13 @@ macro_rules! impl_read_for_point_container_type {
             fn read_ewkb_body<R: Read>(
                 raw: &mut R,
                 is_be: bool,
+                type_id: u32,
                 srid: Option<i32>,
             ) -> Result<Self, Error> {
                 let mut points: Vec<P> = vec![];
                 let size = read_u32(raw, is_be)? as usize;
                 for _ in 0..size {
-                    points.push(P::read_ewkb_body(raw, is_be, srid)?);
+                    points.push(P::read_ewkb_body(raw, is_be, type_id, srid)?);
                 }
                 Ok($geotype::<P> {
                     points: points,
@@ -520,6 +510,7 @@ macro_rules! impl_read_for_point_container_type {
             fn read_ewkb_body<R: Read>(
                 raw: &mut R,
                 is_be: bool,
+                _type_id: u32,
                 srid: Option<i32>,
             ) -> Result<Self, Error> {
                 let mut points: Vec<P> = vec![];
@@ -548,12 +539,13 @@ macro_rules! impl_read_for_geometry_container_type {
             fn read_ewkb_body<R: Read>(
                 raw: &mut R,
                 is_be: bool,
+                type_id: u32,
                 srid: Option<i32>,
             ) -> Result<Self, Error> {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
                 let size = read_u32(raw, is_be)? as usize;
                 for _ in 0..size {
-                    $itemname.push($itemtype::read_ewkb_body(raw, is_be, srid)?);
+                    $itemname.push($itemtype::read_ewkb_body(raw, is_be, type_id, srid)?);
                 }
                 Ok($geotype::<P> {
                     $itemname: $itemname,
@@ -573,6 +565,7 @@ macro_rules! impl_read_for_geometry_container_type {
             fn read_ewkb_body<R: Read>(
                 raw: &mut R,
                 is_be: bool,
+                _type_id: u32,
                 srid: Option<i32>,
             ) -> Result<Self, Error> {
                 let mut $itemname: Vec<$itemtype<P>> = vec![];
@@ -1013,14 +1006,20 @@ where
         }
 
         let geom = match type_id & 0xff {
-            0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid)?),
-            0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid)?),
-            0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid)?),
-            0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid)?),
-            0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid)?),
-            0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid)?),
+            0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, type_id, srid)?),
+            0x02 => {
+                GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, type_id, srid)?)
+            }
+            0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, type_id, srid)?),
+            0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, type_id, srid)?),
+            0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(
+                raw, is_be, type_id, srid,
+            )?),
+            0x06 => {
+                GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, type_id, srid)?)
+            }
             0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(
-                raw, is_be, srid,
+                raw, is_be, type_id, srid,
             )?),
             _ => {
                 return Err(Error::Read(format!(
@@ -1034,6 +1033,7 @@ where
     fn read_ewkb_body<R: Read>(
         _raw: &mut R,
         _is_be: bool,
+        _type_id: u32,
         _srid: Option<i32>,
     ) -> Result<Self, Error> {
         panic!("Not used for generic geometry type")
@@ -1315,6 +1315,7 @@ where
     fn read_ewkb_body<R: Read>(
         raw: &mut R,
         is_be: bool,
+        _type_id: u32,
         _srid: Option<i32>,
     ) -> Result<Self, Error> {
         let mut ret = GeometryCollectionT::new();
@@ -1328,16 +1329,22 @@ where
                 srid = Some(read_i32(raw, is_be)?);
             }
             let geom = match type_id & 0xff {
-                0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, srid)?),
-                0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(raw, is_be, srid)?),
-                0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, srid)?),
-                0x04 => GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, srid)?),
-                0x05 => {
-                    GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(raw, is_be, srid)?)
+                0x01 => GeometryT::Point(P::read_ewkb_body(raw, is_be, type_id, srid)?),
+                0x02 => GeometryT::LineString(LineStringT::<P>::read_ewkb_body(
+                    raw, is_be, type_id, srid,
+                )?),
+                0x03 => GeometryT::Polygon(PolygonT::read_ewkb_body(raw, is_be, type_id, srid)?),
+                0x04 => {
+                    GeometryT::MultiPoint(MultiPointT::read_ewkb_body(raw, is_be, type_id, srid)?)
                 }
-                0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(raw, is_be, srid)?),
+                0x05 => GeometryT::MultiLineString(MultiLineStringT::read_ewkb_body(
+                    raw, is_be, type_id, srid,
+                )?),
+                0x06 => GeometryT::MultiPolygon(MultiPolygonT::read_ewkb_body(
+                    raw, is_be, type_id, srid,
+                )?),
                 0x07 => GeometryT::GeometryCollection(GeometryCollectionT::read_ewkb_body(
-                    raw, is_be, srid,
+                    raw, is_be, type_id, srid,
                 )?),
                 _ => {
                     return Err(Error::Read(format!(

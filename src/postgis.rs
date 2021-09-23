@@ -559,6 +559,11 @@ mod tests {
         let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
         assert_eq!(line, ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]});
 
+        let p = |x, y| ewkb::Point { x: x, y: y, srid: Some(4326) };
+        let result = or_panic!(client.query("SELECT ('SRID=4326;LINESTRINGZ (10 -20 1, -0 -0.5 1)')::geometry", &[]));
+        let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
+        assert_eq!(line, ewkb::LineString {srid: Some(4326), points: vec![p(10.0, -20.0), p(0., -0.5)]});
+
         let result = or_panic!(client.query("SELECT 'LINESTRING EMPTY'::geometry", &[]));
         let line = result.iter().map(|r| r.get::<_, ewkb::LineString>(0)).last().unwrap();
         assert_eq!(&format!("{:?}", line), "LineStringT { points: [], srid: None }");
