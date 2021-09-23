@@ -1,3 +1,8 @@
+## 0.9.0 (2021-09-23)
+
+* Fix reading 2D types from Z or ZM geometries
+  (Removes has_z and has_m methods from point types)
+
 ## 0.8.1 (2021-09-21)
 
 * Avoid unnecessary and unsound transmute (@lnicola)
