@@ -24,7 +24,7 @@ use std::io::prelude::*;
 use std::slice::Iter;
 use std::u8;
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct Point {
     pub x: f64,
     pub y: f64, // TODO: support for z, m
