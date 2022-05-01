@@ -15,14 +15,14 @@ use std::slice::Iter;
 
 // --- Structs for reading PostGIS geometries into
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
     pub srid: Option<i32>,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct PointZ {
     pub x: f64,
     pub y: f64,
@@ -30,7 +30,7 @@ pub struct PointZ {
     pub srid: Option<i32>,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct PointM {
     pub x: f64,
     pub y: f64,
@@ -38,7 +38,7 @@ pub struct PointM {
     pub srid: Option<i32>,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct PointZM {
     pub x: f64,
     pub y: f64,
