@@ -185,6 +185,12 @@ impl Point {
     }
 }
 
+impl From<(f64, f64)> for Point {
+    fn from((x, y): (f64, f64)) -> Self {
+        Self::new(x, y, None)
+    }
+}
+
 impl postgis::Point for Point {
     fn x(&self) -> f64 {
         self.x
@@ -211,6 +217,12 @@ impl PointZ {
         srid: Option<i32>,
     ) -> Self {
         Self::new(x, y, z.unwrap(), srid)
+    }
+}
+
+impl From<(f64, f64, f64)> for PointZ {
+    fn from((x, y, z): (f64, f64, f64)) -> Self {
+        Self::new(x, y, z, None)
     }
 }
 
@@ -246,6 +258,12 @@ impl PointM {
     }
 }
 
+impl From<(f64, f64, f64)> for PointM {
+    fn from((x, y, m): (f64, f64, f64)) -> Self {
+        Self::new(x, y, m, None)
+    }
+}
+
 impl postgis::Point for PointM {
     fn x(&self) -> f64 {
         self.x
@@ -276,6 +294,12 @@ impl PointZM {
         srid: Option<i32>,
     ) -> Self {
         Self::new(x, y, z.unwrap(), m.unwrap(), srid)
+    }
+}
+
+impl From<(f64, f64, f64, f64)> for PointZM {
+    fn from((x, y, z, m): (f64, f64, f64, f64)) -> Self {
+        Self::new(x, y, z, m, None)
     }
 }
 
