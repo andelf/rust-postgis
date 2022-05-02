@@ -24,7 +24,7 @@ use std::io::prelude::*;
 use std::slice::Iter;
 use std::u8;
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Clone, Copy, Debug, Default)]
 pub struct Point {
     pub x: f64,
     pub y: f64, // TODO: support for z, m
@@ -200,7 +200,13 @@ fn read_varint64_as_f64<R: Read>(raw: &mut R, precision: i8) -> Result<f64, Erro
 
 impl Point {
     fn new_from_opt_vals(x: f64, y: f64, _z: Option<f64>, _m: Option<f64>) -> Self {
-        Point { x: x, y: y }
+        Self { x: x, y: y }
+    }
+}
+
+impl From<(f64, f64)> for Point {
+    fn from((x, y): (f64, f64)) -> Self {
+        Self { x, y }
     }
 }
 
